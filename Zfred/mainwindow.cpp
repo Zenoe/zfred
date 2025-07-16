@@ -5,7 +5,10 @@
 #include <cwctype>
 #include <vector>
 #include <sstream>
-
+#include <algorithm>
+#ifdef _DEBUG
+#include "debugtool.h"
+#endif
 // static instance pointer
 MainWindow* MainWindow::self = nullptr;
 
@@ -23,33 +26,33 @@ bool MainWindow::create() {
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = &MainWindow::WndProc;
     wc.hInstance = hInstance_;
-    wc.lpszClassName = L"AlfredIndustrial_MainWnd";
+    wc.lpszClassName = L"zfredwnd";
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
     RegisterClassExW(&wc);
 
-    int width = 660, height = 340;
-    int x = (GetSystemMetrics(SM_CXSCREEN) - width) / 2, y = 100;
+    int x = (GetSystemMetrics(SM_CXSCREEN) - width_) / 2, y = 100;
     hwnd_ = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-        wc.lpszClassName, L"Alfred-industrial",
-        WS_POPUP | WS_CLIPCHILDREN, x, y, width, height,
+        wc.lpszClassName, L"zfred",
+        WS_POPUP | WS_CLIPCHILDREN | WS_BORDER, x, y, width_, height_,
         nullptr, nullptr, hInstance_, nullptr);
     if (!hwnd_) return false;
 
     edit_ = CreateWindowExW(0, L"EDIT", L"",
         WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-        10, 10, width - 20, 32, hwnd_, (HMENU)1, hInstance_, nullptr);
+        10, 10, width_ - 20, 32, hwnd_, (HMENU)1, hInstance_, nullptr);
     HFONT hFont = CreateFontW(20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     SendMessageW(edit_, WM_SETFONT, (WPARAM)hFont, TRUE);
 
     listbox_ = CreateWindowExW(0, L"LISTBOX", nullptr,
         WS_CHILD | WS_VISIBLE | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL,
-        10, 50, width - 20, height - 60, hwnd_, (HMENU)2, hInstance_, nullptr);
+        10, 50, width_ - 20, 80, hwnd_, (HMENU)2, hInstance_, nullptr);
     SendMessageW(listbox_, WM_SETFONT, (WPARAM)hFont, TRUE);
 
     SetWindowSubclass(edit_, &MainWindow::EditProc, 0, 0);
 
+    //ShowWindow(listbox_, SW_HIDE);
     return true;
 }
 
@@ -82,6 +85,9 @@ void MainWindow::save_all() {
 void MainWindow::update_list() {
     SendMessageW(listbox_, LB_RESETCONTENT, 0, 0);
     sel_ = 0;
+#ifdef _DEBUG
+    OutputDebugPrint(last_input_.c_str());
+#endif
     if (mode_ == Mode::Command) {
         if (last_input_.empty() && !history_.all().empty()) {
             // Recent history
@@ -101,7 +107,10 @@ void MainWindow::update_list() {
     else if (mode_ == Mode::FileBrowser) {
         for (const auto& e : browser_.results()) {
             std::wstring disp;
-            if (e.is_parent) disp = L"⤴ ..";
+            if (e.is_parent) {
+                continue;
+                //disp = L"⤴ ..";
+            }
             else if (e.is_dir && e.is_hidden) disp = L"[HID][DIR] " + e.label;
             else if (e.is_dir) disp = L"[DIR] " + e.label;
             else if (e.is_hidden) disp = L"[HID] " + e.label;
@@ -123,6 +132,37 @@ void MainWindow::update_list() {
     }
     int n = (int)SendMessageW(listbox_, LB_GETCOUNT, 0, 0);
     sel_ = (n > 0) ? 0 : -1;
+
+    if (!last_input_.empty()) {
+        if (n > 0) {
+            int item_height = (int)SendMessageW(listbox_, LB_GETITEMHEIGHT, 0, 0);
+            int edit_height = 0;
+            RECT edit_rc;
+            GetWindowRect(edit_, &edit_rc);
+            edit_height = edit_rc.bottom - edit_rc.top;
+
+            int max_items = 10;
+            int visible_items = (n < max_items) ? n : max_items;
+            int total_height = edit_height + (item_height * visible_items);
+
+            // Optionally: add some extra border if needed based on your style
+            // total_height += margin;
+
+            // Set the parent window height:
+            RECT wnd_rc;
+            GetWindowRect(hwnd_, &wnd_rc);
+            int wnd_width = wnd_rc.right - wnd_rc.left;
+            SetWindowPos(hwnd_, NULL, 0, 0, wnd_width, total_height, SWP_NOMOVE | SWP_NOZORDER);
+
+            ShowWindow(listbox_, SW_SHOW);
+        }
+        else {
+            ShowWindow(listbox_, SW_HIDE);
+        }
+    }
+    else {
+		ShowWindow(listbox_, SW_HIDE);
+    }
     if (sel_ >= 0)
         SendMessageW(listbox_, LB_SETCURSEL, sel_, 0);
 }
@@ -181,7 +221,9 @@ void MainWindow::activate_command(int idx) {
 void MainWindow::activate_filebrowser(int idx) {
     const auto& results = browser_.results();
     if (idx >= 0 && idx < (int)results.size()) {
-        const auto& e = results[idx];
+        //const auto& e = results[idx];
+        // copy, cause results may be clear by browser_.update()
+        const auto e = results[idx];
         if (e.is_parent || e.is_dir) {
             browser_.set_cwd(e.fullpath + L"\\");
             browser_.update(L"", show_hidden_);
@@ -230,6 +272,54 @@ void MainWindow::activate_bookmarks(int idx) {
             show(false);
         }
         history_.add(sel);
+    }
+}
+
+void MainWindow::autofill_input_by_selection() {
+    std::wstring text;
+    if (mode_ == Mode::FileBrowser) {
+        const auto& entries = browser_.results();
+        if (sel_ >= 0 && sel_ < (int)entries.size()) {
+            const auto& e = entries[sel_];
+            text = e.fullpath;
+            if (e.is_dir || e.is_parent) {
+                if (text.back() != L'\\' && text.back() != L'/')
+                    text += L'\\'; // you can adapt for '/' if you prefer
+            }
+        }
+    }
+    else if (mode_ == Mode::Command) {
+        auto matches = commands_.filter(last_input_);
+        if (sel_ >= 0 && sel_ < (int)matches.size())
+            text = matches[sel_]->keyword;
+    }
+    else if (mode_ == Mode::Bookmarks) {
+        auto bm = bookmarks_.all();
+        if (sel_ >= 0 && sel_ < (int)bm.size())
+            text = bm[sel_];
+    }
+    else if (mode_ == Mode::History) {
+        const auto& h = history_.all();
+        if (sel_ >= 0 && sel_ < (int)h.size())
+            text = h[sel_];
+    }
+
+    if (!text.empty()) {
+        SetWindowTextW(edit_, text.c_str());
+        SendMessageW(edit_, EM_SETSEL, text.size(), text.size());
+        // Also: update browser list if in FileBrowser and folder selected
+        if (mode_ == Mode::FileBrowser) {
+            // If it's a dir or parent, update the browser's cwd/pattern and list
+            const auto& entries = browser_.results();
+            if (sel_ >= 0 && sel_ < (int)entries.size()) {
+                const auto& e = entries[sel_];
+                if (e.is_dir || e.is_parent) {
+                    browser_.set_cwd(e.fullpath + L"\\");
+                    browser_.update(L"", show_hidden_);
+                    update_list();
+                }
+            }
+        }
     }
 }
 
@@ -292,6 +382,11 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
             SetWindowTextW(hEdit, L"");
             return 0;
         }
+        else if (wParam == VK_TAB) {
+            // Autofill the edit box with the currently selected item (if any)
+            self->autofill_input_by_selection();
+            return 0;
+        }
         else if (wParam == VK_DOWN) {
             int n = (int)SendMessageW(self->listbox_, LB_GETCOUNT, 0, 0);
             if (n == 0) return 0;
@@ -304,6 +399,27 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
             if (n == 0) return 0;
             self->sel_ = (self->sel_ > 0) ? self->sel_ - 1 : n - 1;
             SendMessageW(self->listbox_, LB_SETCURSEL, self->sel_, 0);
+            return 0;
+        }
+        else if (wParam == VK_BACK && (GetKeyState(VK_MENU) & 0x8000)) { // Alt+Backspace
+            wchar_t buffer[512];
+            GetWindowTextW(self->edit_, buffer, 511);
+            std::wstring text = buffer;
+            size_t pos = text.length() ? text.length() - 1 : 0;
+            // Remove trailing slash/backslash if present
+            if (pos && (text[pos] == L'\\' || text[pos] == L'/')) --pos;
+            size_t last_sep = text.rfind(L'\\', pos);
+            size_t last_slash = text.rfind(L'/', pos);
+            size_t cut = (last_sep == std::wstring::npos) ? last_slash : (last_slash == std::wstring::npos ? last_sep : (std::max)(last_sep, last_slash));
+            if (cut != std::wstring::npos) {
+                text.erase(cut + 1);
+                SetWindowTextW(self->edit_, text.c_str());
+            }
+            else {
+                // If no slash, clear box
+                SetWindowTextW(self->edit_, L"");
+            }
+            self->parse_input(text);
             return 0;
         }
         else if ((wParam == L'H' || wParam == L'h') && (GetKeyState(VK_CONTROL) & 0x8000)) {

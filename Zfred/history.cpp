@@ -6,6 +6,7 @@ void HistoryManager::add(const std::wstring& path) {
     if (path.empty()) return;
     if (!items_.empty() && items_.front() == path) return;
     items_.erase(std::remove(items_.begin(), items_.end(), path), items_.end());
+
     items_.push_front(path);
     if (items_.size() > max_items_) items_.pop_back();
 }

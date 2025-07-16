@@ -20,6 +20,8 @@ private:
     HWND hwnd_, edit_, listbox_;
     Mode mode_;
     int sel_;
+    size_t width_ = 600;
+    size_t height_ = 60;
     bool show_hidden_;
 
     CommandLibrary commands_;
@@ -39,10 +41,11 @@ private:
     void activate_bookmarks(int idx);
 
     void file_actions_menu(const std::wstring& path);
+    void autofill_input_by_selection();
 
     void save_all();
 
     static MainWindow* self;
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l);
     static LRESULT CALLBACK EditProc(HWND, UINT, WPARAM, LPARAM, UINT_PTR, DWORD_PTR);
-};
+};;

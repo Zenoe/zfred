@@ -39,6 +39,9 @@
     <ClInclude Include="fileactions.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="debugtool.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
