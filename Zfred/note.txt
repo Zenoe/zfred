@@ -1,0 +1,7 @@
+Ctrl+H: Toggle hidden files
+Ctrl+B: Bookmark/unbookmark selected file or dir
+F2 or Menu Key: File actions menu (open, open folder, delete, rename, copy, (un)bookmark)
+bm / :b in box: Jump to bookmarks list mode
+Arrow keys/Tab/Enter: Navigate, accept
+Double-click: Same as Enter
+Empty box: Shows history
