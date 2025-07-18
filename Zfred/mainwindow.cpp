@@ -6,9 +6,15 @@
 #include <vector>
 #include <sstream>
 #include <algorithm>
+#include <dwmapi.h> // For DwmExtendFrameIntoClientArea (link with dwmapi.lib)
 #ifdef _DEBUG
 #include "debugtool.h"
 #endif
+
+#include "constant.h"
+
+//#include "guihelper.h"
+
 // static instance pointer
 MainWindow* MainWindow::self = nullptr;
 
@@ -31,23 +37,49 @@ bool MainWindow::create() {
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
     RegisterClassExW(&wc);
 
-    int x = (GetSystemMetrics(SM_CXSCREEN) - width_) / 2, y = 100;
-    hwnd_ = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+    int x = (GetSystemMetrics(SM_CXSCREEN) - WND_W) / 2, y = 100;
+    LONG exStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED;
+    hwnd_ = CreateWindowExW(exStyle,
         wc.lpszClassName, L"zfred",
-        WS_POPUP | WS_CLIPCHILDREN | WS_BORDER, x, y, width_, height_,
+        WS_POPUP | WS_CLIPCHILDREN, x, y, WND_W, WND_H,
         nullptr, nullptr, hInstance_, nullptr);
     if (!hwnd_) return false;
 
+    //GuiHelper::SetWindowRoundRgn(hwnd_, WND_W, WND_H, 14);
+
+    // --------- Make Background White and Slightly Transparent -----------
+    SetLayeredWindowAttributes(hwnd_, 0, 245, LWA_ALPHA); // 240/255 opacity (more readable than 200)
+
+    MARGINS margins = { 0, 0, 0, 0 };
+    DwmExtendFrameIntoClientArea(hwnd_, &margins); // No glass
+    // To use complete alpha (blur glass) on Win10+:
+    // a “weird” border or black spots around the EDIT control when your window uses extended styles like WS_EX_LAYERED or enables DWM glass (blur) via DwmExtendFrameIntoClientArea. The issue:
+    //Standard controls like EDIT do not draw their own fully - opaque backgrounds or borders.
+    //    With glass / transparent layered windows, what’s behind the control can bleed through, especially at the border / shadow.
+    //MARGINS margins = { -1 };
+    //DwmExtendFrameIntoClientArea(hwnd_, &margins); // Enable "Aero" glass background
+
     edit_ = CreateWindowExW(0, L"EDIT", L"",
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-        10, 10, width_ - 20, 32, hwnd_, (HMENU)1, hInstance_, nullptr);
-    HFONT hFont = CreateFontW(20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NOHIDESEL | ES_LEFT | WS_BORDER, // Add flat border,
+        PADDING, PADDING, WND_W - (PADDING << 1), EDIT_H, hwnd_, (HMENU)1, hInstance_, nullptr);
+
+    // Use nice size and font (Segoe UI, 18px height)
+    HFONT hFont = CreateFontW(
+        18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+
     SendMessageW(edit_, WM_SETFONT, (WPARAM)hFont, TRUE);
 
-    listbox_ = CreateWindowExW(0, L"LISTBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL,
-        10, 50, width_ - 20, 80, hwnd_, (HMENU)2, hInstance_, nullptr);
+    listbox_ = CreateWindowExW(
+        WS_EX_CLIENTEDGE, L"LISTBOX", nullptr,
+        WS_CHILD | WS_VISIBLE | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | LBS_DISABLENOSCROLL,
+        PADDING, PADDING+EDIT_H+ EDIT_LIST_MARGIN, LIST_W, 0,
+        hwnd_, (HMENU)2, hInstance_, nullptr);
+
+    //listbox_ = CreateWindowExW(0, L"LISTBOX", nullptr,
+    //    WS_CHILD | WS_VISIBLE | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL,
+    //    10, 50, WND_W - 20, 80, hwnd_, (HMENU)2, hInstance_, nullptr);
     SendMessageW(listbox_, WM_SETFONT, (WPARAM)hFont, TRUE);
 
     SetWindowSubclass(edit_, &MainWindow::EditProc, 0, 0);
@@ -105,9 +137,11 @@ void MainWindow::update_list() {
         }
     }
     else if (mode_ == Mode::FileBrowser) {
+        OutputDebugPrintVev( browser_.results());
         for (const auto& e : browser_.results()) {
             std::wstring disp;
             if (e.is_parent) {
+                OutputDebugPrint("e is paent  ", e.fullpath);
                 continue;
                 //disp = L"⤴ ..";
             }
@@ -136,23 +170,13 @@ void MainWindow::update_list() {
     if (!last_input_.empty()) {
         if (n > 0) {
             int item_height = (int)SendMessageW(listbox_, LB_GETITEMHEIGHT, 0, 0);
-            int edit_height = 0;
-            RECT edit_rc;
-            GetWindowRect(edit_, &edit_rc);
-            edit_height = edit_rc.bottom - edit_rc.top;
 
-            int max_items = 10;
-            int visible_items = (n < max_items) ? n : max_items;
-            int total_height = edit_height + (item_height * visible_items);
+            int visible_items = (n < MAX_ITEMS) ? n : MAX_ITEMS;
+            int list_height = (item_height * visible_items) + LIST_BOTTOM_PADDING;
+            int total_height = WND_H + EDIT_LIST_MARGIN + list_height;
 
-            // Optionally: add some extra border if needed based on your style
-            // total_height += margin;
-
-            // Set the parent window height:
-            RECT wnd_rc;
-            GetWindowRect(hwnd_, &wnd_rc);
-            int wnd_width = wnd_rc.right - wnd_rc.left;
-            SetWindowPos(hwnd_, NULL, 0, 0, wnd_width, total_height, SWP_NOMOVE | SWP_NOZORDER);
+            SetWindowPos(hwnd_, NULL, 0, 0, WND_W, total_height, SWP_NOMOVE | SWP_NOZORDER);
+            SetWindowPos(listbox_, NULL, 0, 0, LIST_W, list_height, SWP_NOMOVE | SWP_NOZORDER);
 
             ShowWindow(listbox_, SW_SHOW);
         }
@@ -508,6 +532,26 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     case WM_DESTROY:
         self->save_all();
         PostQuitMessage(0); break;
+    case WM_CTLCOLORLISTBOX: {
+        HDC hdc = (HDC)wParam;
+        SetBkColor(hdc, RGB(245, 245, 245));   // Soft gray
+        SetTextColor(hdc, RGB(25, 25, 25));   // Near black
+        static HBRUSH hbr = CreateSolidBrush(RGB(245, 245, 245));
+        return (INT_PTR)hbr;
+    }
+
+    case WM_CTLCOLOREDIT: {
+        HDC hdc = (HDC)wParam;
+        SetBkColor(hdc, RGB(255, 255, 255));
+        SetTextColor(hdc, RGB(25, 25, 25));
+        static HBRUSH hbr = CreateSolidBrush(RGB(255, 255, 255));
+        return (INT_PTR)hbr;
+    }
+    case WM_LBUTTONDOWN:
+        // Make client area work like a title bar for moving window
+        ReleaseCapture();
+        SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+        return 0;
     default:
         return DefWindowProcW(hwnd, msg, wParam, lParam);
     }

@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="gui">
+      <UniqueIdentifier>{5d9d08db-d4e6-4da4-a03d-8230a6f5054f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="targetver.h">
@@ -42,6 +45,12 @@
     <ClInclude Include="debugtool.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="guihelper.h">
+      <Filter>gui</Filter>
+    </ClInclude>
+    <ClInclude Include="constant.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -67,6 +76,9 @@
     </ClCompile>
     <ClCompile Include="fileactions.cpp">
       <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="guihelper.cpp">
+      <Filter>gui</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

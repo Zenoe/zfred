@@ -20,8 +20,6 @@ private:
     HWND hwnd_, edit_, listbox_;
     Mode mode_;
     int sel_;
-    size_t width_ = 600;
-    size_t height_ = 60;
     bool show_hidden_;
 
     CommandLibrary commands_;

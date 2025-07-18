@@ -1,5 +1,9 @@
 ﻿#include "mainwindow.h"
 
+//#include <gdiplus.h>
+//using namespace Gdiplus;
+//ULONG_PTR gdiplusToken;
+
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     HANDLE hMutex = CreateMutexW(NULL, TRUE, L"zfred_SINGLETON_MUTEX");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -11,11 +15,16 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         }
         return 0; // exit, already running!
     }
+    //GdiplusStartupInput gdiplusStartupInput;
+    //GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
     MainWindow app(hInst);
     if (!app.create())
         return 1;
     app.show(true); // Start hidden
     app.run();
+
+    //GdiplusShutdown(gdiplusToken);
     return 0;
 }
 //int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {

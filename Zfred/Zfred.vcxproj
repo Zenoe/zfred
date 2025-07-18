@@ -109,7 +109,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>comctl32.lib;shell32.lib;Shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>dwmapi.lib;comctl32.lib;shell32.lib;Shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -133,10 +133,12 @@
   <ItemGroup>
     <ClInclude Include="bookmarks.h" />
     <ClInclude Include="commandlibrary.h" />
+    <ClInclude Include="constant.h" />
     <ClInclude Include="debugtool.h" />
     <ClInclude Include="fileactions.h" />
     <ClInclude Include="filebrowser.h" />
     <ClInclude Include="FsUtils.h" />
+    <ClInclude Include="guihelper.h" />
     <ClInclude Include="history.h" />
     <ClInclude Include="mainwindow.h" />
     <ClInclude Include="targetver.h" />
@@ -147,6 +149,7 @@
     <ClCompile Include="fileactions.cpp" />
     <ClCompile Include="filebrowser.cpp" />
     <ClCompile Include="FsUtils.cpp" />
+    <ClCompile Include="guihelper.cpp" />
     <ClCompile Include="history.cpp" />
     <ClCompile Include="mainwindow.cpp" />
     <ClCompile Include="main.cpp" />
