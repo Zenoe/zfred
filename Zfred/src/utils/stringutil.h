@@ -41,4 +41,6 @@ namespace string_util {
         return it != str.end();
     }
 
+    // Delete one word backward (like Ctrl+Backspace)
+    std::wstring delete_word_backward(const wchar_t* input);
 } // namespace string_util

@@ -12,6 +12,7 @@
 #endif
 
 #include "constant.h"
+#include "utils/stringutil.h"
 
 //#include "guihelper.h"
 
@@ -418,39 +419,45 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
             self->autofill_input_by_selection();
             return 0;
         }
-        else if (wParam == VK_DOWN) {
+        else if (wParam == VK_DOWN || (wParam == L'N' && (GetKeyState(VK_CONTROL) & 0x8000))) {
             int n = (int)SendMessageW(self->listbox_, LB_GETCOUNT, 0, 0);
             if (n == 0) return 0;
             self->sel_ = (self->sel_ + 1) % n;
             SendMessageW(self->listbox_, LB_SETCURSEL, self->sel_, 0);
             return 0;
         }
-        else if (wParam == VK_UP) {
+        else if (wParam == VK_UP || (wParam == L'P' && (GetKeyState(VK_CONTROL) & 0x8000))) {
             int n = (int)SendMessageW(self->listbox_, LB_GETCOUNT, 0, 0);
             if (n == 0) return 0;
             self->sel_ = (self->sel_ > 0) ? self->sel_ - 1 : n - 1;
             SendMessageW(self->listbox_, LB_SETCURSEL, self->sel_, 0);
             return 0;
         }
-        else if (wParam == VK_BACK && (GetKeyState(VK_MENU) & 0x8000)) { // Alt+Backspace
-            wchar_t buffer[512];
-            GetWindowTextW(self->edit_, buffer, 511);
-            std::wstring text = buffer;
-            size_t pos = text.length() ? text.length() - 1 : 0;
-            // Remove trailing slash/backslash if present
-            if (pos && (text[pos] == L'\\' || text[pos] == L'/')) --pos;
-            size_t last_sep = text.rfind(L'\\', pos);
-            size_t last_slash = text.rfind(L'/', pos);
-            size_t cut = (last_sep == std::wstring::npos) ? last_slash : (last_slash == std::wstring::npos ? last_sep : (std::max)(last_sep, last_slash));
-            if (cut != std::wstring::npos) {
-                text.erase(cut + 1);
-                SetWindowTextW(self->edit_, text.c_str());
+        else if (wParam == VK_BACK ) { 
+            if (self->mode_ == Mode::FileBrowser) {
+                // cut one path section on each key stroke
+                wchar_t buffer[512];
+                GetWindowTextW(self->edit_, buffer, 511);
+                std::wstring text = buffer;
+                size_t pos = text.length() ? text.length() - 1 : 0;
+                // Remove trailing slash/backslash if present
+                if (pos && (text[pos] == L'\\' || text[pos] == L'/')) --pos;
+                size_t last_sep = text.rfind(L'\\', pos);
+                size_t last_slash = text.rfind(L'/', pos);
+                size_t cut = (last_sep == std::wstring::npos) ? last_slash : (last_slash == std::wstring::npos ? last_sep : (std::max)(last_sep, last_slash));
+                if (cut != std::wstring::npos) {
+                    text.erase(cut + 2);
+                    SetWindowTextW(self->edit_, text.c_str());
+                }
+                else {
+                    // If no slash, clear box
+                    SetWindowTextW(self->edit_, L"");
+                }
+                // Move the caret to the end
+                int len = GetWindowTextLengthW(self->edit_);
+                SendMessageW(self->edit_, EM_SETSEL, len, len);
+                self->parse_input(text);
             }
-            else {
-                // If no slash, clear box
-                SetWindowTextW(self->edit_, L"");
-            }
-            self->parse_input(text);
             return 0;
         }
         else if ((wParam == L'H' || wParam == L'h') && (GetKeyState(VK_CONTROL) & 0x8000)) {
@@ -502,10 +509,28 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
             return 0;
         }
         break;
+    case WM_SYSKEYDOWN:
+        if (wParam == VK_BACK && (GetKeyState(VK_MENU) & 0x8000)) { // Alt+Backspace
+            wchar_t buf[512];
+            GetWindowTextW(hEdit, buf, 511);
+            std::wstring newText = string_util::delete_word_backward(buf);
+
+			SetWindowTextW(hEdit, newText.c_str());
+			int len = GetWindowTextLengthW(hEdit);
+			SendMessageW(hEdit, EM_SETSEL, len, len);
+            
+            return 0;
+        }
     case WM_CHAR: {
         LRESULT res = DefSubclassProc(hEdit, msg, wParam, lParam);
-        wchar_t buffer[512]; GetWindowTextW(hEdit, buffer, 511);
-        self->parse_input(buffer);
+        // Allow only printable (`wParam >= 32`) to reach your parse logic
+        // You may also allow Enter (13), Tab (9), etc., as needed
+        if (wParam >= 32)
+        {
+            wchar_t buffer[512];
+            GetWindowTextW(hEdit, buffer, 511);
+            self->parse_input(buffer);
+        }
         return res;
     }
     }
