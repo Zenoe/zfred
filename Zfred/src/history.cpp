@@ -20,4 +20,5 @@ void HistoryManager::load() {
     std::wifstream in(L"alfred_history.txt");
     std::wstring s;
     while (std::getline(in, s)) if (!s.empty()) items_.push_back(s);
+
 }

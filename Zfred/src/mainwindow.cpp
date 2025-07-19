@@ -45,6 +45,7 @@ bool MainWindow::create() {
         nullptr, nullptr, hInstance_, nullptr);
     if (!hwnd_) return false;
 
+    // this would make the corner jagged
     //GuiHelper::SetWindowRoundRgn(hwnd_, WND_W, WND_H, 14);
 
     // --------- Make Background White and Slightly Transparent -----------
@@ -77,9 +78,6 @@ bool MainWindow::create() {
         PADDING, PADDING+EDIT_H+ EDIT_LIST_MARGIN, LIST_W, 0,
         hwnd_, (HMENU)2, hInstance_, nullptr);
 
-    //listbox_ = CreateWindowExW(0, L"LISTBOX", nullptr,
-    //    WS_CHILD | WS_VISIBLE | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL,
-    //    10, 50, WND_W - 20, 80, hwnd_, (HMENU)2, hInstance_, nullptr);
     SendMessageW(listbox_, WM_SETFONT, (WPARAM)hFont, TRUE);
 
     SetWindowSubclass(edit_, &MainWindow::EditProc, 0, 0);
@@ -91,6 +89,8 @@ bool MainWindow::create() {
 void MainWindow::show(bool visible) {
     ShowWindow(hwnd_, visible ? SW_SHOW : SW_HIDE);
     if (visible) {
+        SetForegroundWindow(hwnd_);
+        SetActiveWindow(hwnd_);
         SetWindowTextW(edit_, L"");
         SetFocus(edit_);
         mode_ = Mode::Command;
@@ -118,10 +118,10 @@ void MainWindow::update_list() {
     SendMessageW(listbox_, LB_RESETCONTENT, 0, 0);
     sel_ = 0;
 #ifdef _DEBUG
-    OutputDebugPrint(last_input_.c_str());
+    OutputDebugPrint("last_input: " , last_input_.c_str());
 #endif
     if (mode_ == Mode::Command) {
-        if (last_input_.empty() && !history_.all().empty()) {
+       if (last_input_.empty() && !history_.all().empty()) {
             // Recent history
             for (const auto& h : history_.all()) {
                 std::wstring label = (PathIsDirectoryW(h.c_str()) ? L"🗂 " : L"🗎 ") + h;
@@ -137,11 +137,11 @@ void MainWindow::update_list() {
         }
     }
     else if (mode_ == Mode::FileBrowser) {
-        OutputDebugPrintVev( browser_.results());
+        //OutputDebugPrintVev( browser_.results());
         for (const auto& e : browser_.results()) {
             std::wstring disp;
             if (e.is_parent) {
-                OutputDebugPrint("e is paent  ", e.fullpath);
+                //OutputDebugPrint("e is paent  ", e.fullpath);
                 continue;
                 //disp = L"⤴ ..";
             }
@@ -167,26 +167,23 @@ void MainWindow::update_list() {
     int n = (int)SendMessageW(listbox_, LB_GETCOUNT, 0, 0);
     sel_ = (n > 0) ? 0 : -1;
 
-    if (!last_input_.empty()) {
-        if (n > 0) {
-            int item_height = (int)SendMessageW(listbox_, LB_GETITEMHEIGHT, 0, 0);
+	if (n > 0) {
+        // can be history or file/folder list
+		int item_height = (int)SendMessageW(listbox_, LB_GETITEMHEIGHT, 0, 0);
 
-            int visible_items = (n < MAX_ITEMS) ? n : MAX_ITEMS;
-            int list_height = (item_height * visible_items) + LIST_BOTTOM_PADDING;
-            int total_height = WND_H + EDIT_LIST_MARGIN + list_height;
+		int visible_items = (n < MAX_ITEMS) ? n : MAX_ITEMS;
+		int list_height = (item_height * visible_items) + LIST_BOTTOM_PADDING;
+		int total_height = WND_H + EDIT_LIST_MARGIN + list_height;
 
-            SetWindowPos(hwnd_, NULL, 0, 0, WND_W, total_height, SWP_NOMOVE | SWP_NOZORDER);
-            SetWindowPos(listbox_, NULL, 0, 0, LIST_W, list_height, SWP_NOMOVE | SWP_NOZORDER);
+		SetWindowPos(hwnd_, NULL, 0, 0, WND_W, total_height, SWP_NOMOVE | SWP_NOZORDER);
+		SetWindowPos(listbox_, NULL, 0, 0, LIST_W, list_height, SWP_NOMOVE | SWP_NOZORDER);
 
-            ShowWindow(listbox_, SW_SHOW);
-        }
-        else {
-            ShowWindow(listbox_, SW_HIDE);
-        }
-    }
-    else {
+		ShowWindow(listbox_, SW_SHOW);
+	}
+	else {
 		ShowWindow(listbox_, SW_HIDE);
-    }
+		SetWindowPos(hwnd_, NULL, 0, 0, WND_W, WND_H, SWP_NOMOVE | SWP_NOZORDER);
+	}
     if (sel_ >= 0)
         SendMessageW(listbox_, LB_SETCURSEL, sel_, 0);
 }
@@ -240,6 +237,16 @@ void MainWindow::activate_command(int idx) {
             show(false);
         }
         history_.add(sel);
+    }
+    else {
+        // just run
+        if (!last_input_.empty()) {
+            auto result = (INT_PTR)ShellExecuteW(nullptr, L"open", last_input_.c_str(), nullptr, nullptr, SW_SHOW);
+            if (result <= 32) {
+                MessageBoxW(hwnd_, (L"'" + last_input_ + L"' was not found in system PATH or could not be executed.").c_str(),
+                    L"Command failed", MB_OK | MB_ICONWARNING);
+            }
+        }
     }
 }
 void MainWindow::activate_filebrowser(int idx) {

@@ -4,32 +4,10 @@
 #include <algorithm>
 #include <cwctype>
 #include "debugtool.h"
+#include "utils/stringutil.h"
 
 namespace fs = std::filesystem;
 
-static bool fuzzy_match(const std::wstring& pattern, const std::wstring& str) {
-    if (pattern.empty()) return true;
-    size_t pi = 0;
-    if (pattern == L"boo" && str == L"book") {
-        OutputDebugPrint("ok");
-    }
-    OutputDebugPrint("fuzzymatch;", pattern, "  ", str);
-    for (wchar_t c : str) {
-        if (towlower(c) == towlower(pattern[pi])) {
-            if (++pi == pattern.size()) return true;
-        }
-        //else {
-        //    pi = 0;
-        //}
-    }
-    return false;
-}
-static bool substring_match(const std::wstring& pattern, const std::wstring& str) {
-    if (pattern.empty()) return true;
-    auto it = std::search(str.begin(), str.end(), pattern.begin(), pattern.end(),
-        [](wchar_t ch1, wchar_t ch2) { return towlower(ch1) == towlower(ch2); });
-    return it != str.end();
-}
 static bool is_hidden(const fs::directory_entry& entry) {
     DWORD attr = GetFileAttributesW(entry.path().c_str());
     return (attr != INVALID_FILE_ATTRIBUTES) && (attr & FILE_ATTRIBUTE_HIDDEN);
@@ -50,18 +28,16 @@ void FileBrowser::update(const std::wstring& pattern, bool show_hidden) {
     show_hidden_ = show_hidden;
     entries_.clear();
     OutputDebugPrint("pattern: ", pattern.c_str());
-    if (pattern == L"bo") {
-		OutputDebugPrint("bo");
-    }
     fs::path bdir(cwd_.empty() ? L"." : cwd_);
-    if (bdir.has_parent_path() || bdir.root_path() != bdir) {
-        FileEntry e;
-        e.label = L"..";
-        e.fullpath = (bdir / L"..").lexically_normal().wstring();
-        e.is_dir = true;
-        e.is_parent = true;
-        entries_.push_back(e);
-    }
+    // don't need parent folder entry(..)
+    //if (bdir.has_parent_path() || bdir.root_path() != bdir) {
+    //    FileEntry e;
+    //    e.label = L"..";
+    //    e.fullpath = (bdir / L"..").lexically_normal().wstring();
+    //    e.is_dir = true;
+    //    e.is_parent = true;
+    //    entries_.push_back(e);
+    //}
     bool use_substr = (!pattern.empty() && pattern[0] == L'*');
     std::wstring pat = use_substr ? pattern.substr(1) : pattern;
     try {
@@ -76,11 +52,11 @@ void FileBrowser::update(const std::wstring& pattern, bool show_hidden) {
             e.label = entry.path().filename().wstring() + (e.is_dir ? L"/" : L"");
             e.fullpath = entry.path().wstring();
             if (use_substr) {
-                if (substring_match(pat, entry.path().filename().wstring()))
+                if (string_util::substring_match(pat, entry.path().filename().wstring()))
                     entries_.push_back(e);
             }
             else {
-                if (fuzzy_match(pat, entry.path().filename().wstring()))
+                if (string_util::fuzzy_match(pat, entry.path().filename().wstring()))
                     entries_.push_back(e);
             }
         }

@@ -1,84 +1,94 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="源文件">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
-    </Filter>
-    <Filter Include="头文件">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
-    </Filter>
     <Filter Include="资源文件">
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="gui">
-      <UniqueIdentifier>{5d9d08db-d4e6-4da4-a03d-8230a6f5054f}</UniqueIdentifier>
+    <Filter Include="src">
+      <UniqueIdentifier>{06718b26-dcb9-4283-9b49-d4f34dc83137}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\gui">
+      <UniqueIdentifier>{68b4f577-3cdc-4bd4-b968-e7f82c465d33}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\utils">
+      <UniqueIdentifier>{31bda6d6-4e37-4023-8f62-018686bf9b9c}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="targetver.h">
-      <Filter>头文件</Filter>
+    <ClInclude Include="src\bookmarks.h">
+      <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="commandlibrary.h">
-      <Filter>头文件</Filter>
+    <ClInclude Include="src\commandlibrary.h">
+      <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="mainwindow.h">
-      <Filter>头文件</Filter>
+    <ClInclude Include="src\constant.h">
+      <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="FsUtils.h">
-      <Filter>头文件</Filter>
+    <ClInclude Include="src\debugtool.h">
+      <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="filebrowser.h">
-      <Filter>头文件</Filter>
+    <ClInclude Include="src\fileactions.h">
+      <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="history.h">
-      <Filter>头文件</Filter>
+    <ClInclude Include="src\filebrowser.h">
+      <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="bookmarks.h">
-      <Filter>头文件</Filter>
+    <ClInclude Include="src\framework.h">
+      <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="fileactions.h">
-      <Filter>头文件</Filter>
+    <ClInclude Include="src\FsUtils.h">
+      <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="debugtool.h">
-      <Filter>头文件</Filter>
+    <ClInclude Include="src\history.h">
+      <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="guihelper.h">
-      <Filter>gui</Filter>
+    <ClInclude Include="src\mainwindow.h">
+      <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="constant.h">
-      <Filter>头文件</Filter>
+    <ClInclude Include="src\guihelper.h">
+      <Filter>src\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\utils\stringutil.h">
+      <Filter>src\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="src\utils\sysutil.h">
+      <Filter>src\utils</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
-      <Filter>源文件</Filter>
+    <ClCompile Include="src\bookmarks.cpp">
+      <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="commandlibrary.cpp">
-      <Filter>源文件</Filter>
+    <ClCompile Include="src\commandlibrary.cpp">
+      <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="mainwindow.cpp">
-      <Filter>源文件</Filter>
+    <ClCompile Include="src\fileactions.cpp">
+      <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="FsUtils.cpp">
-      <Filter>源文件</Filter>
+    <ClCompile Include="src\filebrowser.cpp">
+      <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="filebrowser.cpp">
-      <Filter>源文件</Filter>
+    <ClCompile Include="src\FsUtils.cpp">
+      <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="history.cpp">
-      <Filter>源文件</Filter>
+    <ClCompile Include="src\history.cpp">
+      <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="bookmarks.cpp">
-      <Filter>源文件</Filter>
+    <ClCompile Include="src\main.cpp">
+      <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="fileactions.cpp">
-      <Filter>源文件</Filter>
+    <ClCompile Include="src\mainwindow.cpp">
+      <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="guihelper.cpp">
-      <Filter>gui</Filter>
+    <ClCompile Include="src\guihelper.cpp">
+      <Filter>src\gui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\utils\stringutil.cpp">
+      <Filter>src\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="src\utils\sysutil.cpp">
+      <Filter>src\utils</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

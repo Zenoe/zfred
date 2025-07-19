@@ -105,6 +105,7 @@
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -131,28 +132,32 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="bookmarks.h" />
-    <ClInclude Include="commandlibrary.h" />
-    <ClInclude Include="constant.h" />
-    <ClInclude Include="debugtool.h" />
-    <ClInclude Include="fileactions.h" />
-    <ClInclude Include="filebrowser.h" />
-    <ClInclude Include="FsUtils.h" />
-    <ClInclude Include="guihelper.h" />
-    <ClInclude Include="history.h" />
-    <ClInclude Include="mainwindow.h" />
-    <ClInclude Include="targetver.h" />
+    <ClInclude Include="src\bookmarks.h" />
+    <ClInclude Include="src\commandlibrary.h" />
+    <ClInclude Include="src\constant.h" />
+    <ClInclude Include="src\debugtool.h" />
+    <ClInclude Include="src\fileactions.h" />
+    <ClInclude Include="src\filebrowser.h" />
+    <ClInclude Include="src\framework.h" />
+    <ClInclude Include="src\FsUtils.h" />
+    <ClInclude Include="src\guihelper.h" />
+    <ClInclude Include="src\history.h" />
+    <ClInclude Include="src\mainwindow.h" />
+    <ClInclude Include="src\utils\stringutil.h" />
+    <ClInclude Include="src\utils\sysutil.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="bookmarks.cpp" />
-    <ClCompile Include="commandlibrary.cpp" />
-    <ClCompile Include="fileactions.cpp" />
-    <ClCompile Include="filebrowser.cpp" />
-    <ClCompile Include="FsUtils.cpp" />
-    <ClCompile Include="guihelper.cpp" />
-    <ClCompile Include="history.cpp" />
-    <ClCompile Include="mainwindow.cpp" />
-    <ClCompile Include="main.cpp" />
+    <ClCompile Include="src\bookmarks.cpp" />
+    <ClCompile Include="src\commandlibrary.cpp" />
+    <ClCompile Include="src\fileactions.cpp" />
+    <ClCompile Include="src\filebrowser.cpp" />
+    <ClCompile Include="src\FsUtils.cpp" />
+    <ClCompile Include="src\guihelper.cpp" />
+    <ClCompile Include="src\history.cpp" />
+    <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\mainwindow.cpp" />
+    <ClCompile Include="src\utils\stringutil.cpp" />
+    <ClCompile Include="src\utils\sysutil.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
