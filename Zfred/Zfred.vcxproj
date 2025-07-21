@@ -144,6 +144,7 @@
     <ClInclude Include="src\guihelper.h" />
     <ClInclude Include="src\history.h" />
     <ClInclude Include="src\mainwindow.h" />
+    <ClInclude Include="src\utils\simpleundo.h" />
     <ClInclude Include="src\utils\stringutil.h" />
     <ClInclude Include="src\utils\sysutil.h" />
   </ItemGroup>
@@ -157,8 +158,12 @@
     <ClCompile Include="src\history.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\mainwindow.cpp" />
+    <ClCompile Include="src\utils\simpleundo.cpp" />
     <ClCompile Include="src\utils\stringutil.cpp" />
     <ClCompile Include="src\utils\sysutil.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="note.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

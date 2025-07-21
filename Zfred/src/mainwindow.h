@@ -5,6 +5,7 @@
 #include "filebrowser.h"
 #include "history.h"
 #include "bookmarks.h"
+#include "utils/simpleundo.h"
 
 enum class Mode { Command, FileBrowser, History, Bookmarks };
 
@@ -17,7 +18,7 @@ public:
 
 private:
     HINSTANCE hInstance_;
-    HWND hwnd_, edit_, listbox_;
+    HWND hwnd_, edit_, listbox_, combo_mode_;
     Mode mode_;
     int sel_;
     bool show_hidden_;
@@ -26,7 +27,10 @@ private:
     FileBrowser browser_;
     HistoryManager history_;
     BookmarkManager bookmarks_;
+    
+    SimpleUndo simpleundo_;
 
+    
     // State: last input, for context
     std::wstring last_input_;
 
@@ -42,6 +46,11 @@ private:
     void autofill_input_by_selection();
 
     void save_all();
+
+    const LRESULT& processAltBackspace();
+    const LRESULT& processBackspace();
+
+    LRESULT undo_delete_word();
 
     static MainWindow* self;
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l);
