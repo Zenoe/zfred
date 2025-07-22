@@ -1,6 +1,7 @@
 // history.cpp
 #include "history.h"
 #include <fstream>
+#include "utils/sysutil.h"
 
 void HistoryManager::add(const std::wstring& path) {
     if (path.empty()) return;
@@ -21,4 +22,6 @@ void HistoryManager::load() {
     std::wstring s;
     while (std::getline(in, s)) if (!s.empty()) items_.push_back(s);
 
+    const std::vector<std::wstring> recentVec = sys_util::loadSystemRecent();
+    items_.insert(items_.end(), recentVec.begin(), recentVec.end());
 }

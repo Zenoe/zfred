@@ -2,7 +2,6 @@
 #include <windows.h>
 #include <cwctype>  // For std::towlower in C++
 #include "utils/stringutil.h"
-#include "utils/sysutil.h"
 
 CommandLibrary::CommandLibrary() {
     commands_.push_back({ L"exit", L"Exit the application", []() { PostQuitMessage(0); } });
@@ -12,8 +11,8 @@ CommandLibrary::CommandLibrary() {
     commands_.push_back({ L"mspaint", L"Open Paint", []() { ShellExecuteW(nullptr, L"open", L"mspaint.exe", nullptr, nullptr, SW_SHOW); } });
     commands_.push_back({ L"cmd", L"Open CommandItem Prompt", []() { ShellExecuteW(nullptr, L"open", L"cmd.exe", nullptr, nullptr, SW_SHOW); } });
     commands_.push_back({ L"powershell", L"Open PowerShell", []() { ShellExecuteW(nullptr, L"open", L"powershell.exe", nullptr, nullptr, SW_SHOW); } });
-    const std::vector<CommandItem> recentVec = sys_util::loadSystemRecent();
-    commands_.insert(commands_.end(), recentVec.begin(), recentVec.end());
+    //const std::vector<CommandItem> recentVec = sys_util::loadSystemRecent();
+    //commands_.insert(commands_.end(), recentVec.begin(), recentVec.end());
 }
 
 const std::vector<CommandItem>& CommandLibrary::getAllCommands() const {

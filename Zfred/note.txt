@@ -1,4 +1,15 @@
+todo:
+history fuzzy search
+
+
+
+
+done:
 ctrl / undo delete word
+set combo value while input filebrowser flag like c:/xx
+
+
+
 
 Ctrl+H: Toggle hidden files
 Ctrl+B: Bookmark/unbookmark selected file or dir

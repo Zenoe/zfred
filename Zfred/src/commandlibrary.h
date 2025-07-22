@@ -8,7 +8,6 @@ struct CommandItem {
     std::wstring keyword;
     std::wstring description;
     std::function<void()> action;
-    bool is_command=true;
 };
 
 class CommandLibrary {

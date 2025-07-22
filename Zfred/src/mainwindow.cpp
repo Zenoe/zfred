@@ -87,31 +87,42 @@ bool MainWindow::create() {
         WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST,
          PADDING + EDIT_W +CONTROL_MARGIN, PADDING, COMBO_W, COMBO_H, hwnd_, (HMENU)3, hInstance_, nullptr);
 
+    // After creating the ComboBox:
+    SendMessageW(combo_mode_, CB_SETITEMHEIGHT, (WPARAM)-1, (LPARAM)(EDIT_H - 4));  // Adjust as needed
     SendMessageW(combo_mode_, WM_SETFONT, (WPARAM)hFont, TRUE);
-    SendMessageW(combo_mode_, CB_ADDSTRING, 0, (LPARAM)L"Command");
     SendMessageW(combo_mode_, CB_ADDSTRING, 0, (LPARAM)L"FileBrowser");
     SendMessageW(combo_mode_, CB_ADDSTRING, 0, (LPARAM)L"Bookmarks");
     SendMessageW(combo_mode_, CB_ADDSTRING, 0, (LPARAM)L"History");
-    SendMessageW(combo_mode_, CB_SETCURSEL, 0, 0); // set to Command
-
+    SendMessageW(combo_mode_, CB_ADDSTRING, 0, (LPARAM)L"Command");
+    SendMessageW(combo_mode_, CB_SETCURSEL, 0, 0); 
 
     SetWindowSubclass(edit_, &MainWindow::EditProc, 0, 0);
-
-    //ShowWindow(listbox_, SW_HIDE);
     return true;
 }
 
+void MainWindow::set_mode(Mode mode) {
+    mode_ = mode;
+    int idx = 0;
+	switch (mode_) {
+	case Mode::FileBrowser: idx = 0; break;
+	case Mode::Bookmarks: idx = 1; break;
+	case Mode::History: idx = 2; break;
+	case Mode::Command: idx = 3; break;
+	}
+	SendMessageW(combo_mode_, CB_SETCURSEL, idx, 0);
+	update_list();
+}
 void MainWindow::show(bool visible) {
-    ShowWindow(hwnd_, visible ? SW_SHOW : SW_HIDE);
-    if (visible) {
-        SetForegroundWindow(hwnd_);
-        SetActiveWindow(hwnd_);
-        SetWindowTextW(edit_, L"");
-        SetFocus(edit_);
-        mode_ = Mode::Command;
-        last_input_.clear();
-        update_list();
-    }
+	ShowWindow(hwnd_, visible ? SW_SHOW : SW_HIDE);
+	if (visible) {
+		SetForegroundWindow(hwnd_);
+		SetActiveWindow(hwnd_);
+		SetWindowTextW(edit_, L"");
+		SetFocus(edit_);
+		mode_ = Mode::Command;
+		last_input_.clear();
+		update_list();
+	}
 }
 
 void MainWindow::run() {
@@ -159,16 +170,16 @@ LRESULT MainWindow::undo_delete_word() {
 void MainWindow::update_list() {
     SendMessageW(listbox_, LB_RESETCONTENT, 0, 0);
     sel_ = 0;
-#ifdef _DEBUG
-    OutputDebugPrint("last_input: " , last_input_.c_str());
-#endif
+//#ifdef _DEBUG
+//    OutputDebugPrint("last_input: " , last_input_.c_str());
+//#endif
     if (mode_ == Mode::Command) {
        if (last_input_.empty() && !history_.all().empty()) {
             // Recent history
-            for (const auto& h : history_.all()) {
-                std::wstring label = (PathIsDirectoryW(h.c_str()) ? L"🗂 " : L"🗎 ") + h;
-                SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
-            }
+            //for (const auto& h : history_.all()) {
+            //    std::wstring label = (PathIsDirectoryW(h.c_str()) ? L"🗂 " : L"🗎 ") + h;
+            //    SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
+            //}
         }
         else {
             auto matches = commands_.filter(last_input_);
@@ -232,17 +243,17 @@ void MainWindow::update_list() {
 
 void MainWindow::parse_input(const std::wstring& text) {
     last_input_ = text;
-    if (text == L":b" || text == L"bm" || text == L"bookmarks") {
-        mode_ = Mode::Bookmarks;
-        update_list();
-        return;
-    }
-    else if (text.empty()) {
-        mode_ = Mode::History;
-        update_list();
-        return;
-    }
-    else if (text.size() >= 2 && text[1] == L':' && (text[2] == L'/' || text[2] == L'\\')) {
+    //if (text == L":b" || text == L"bm" || text == L"bookmarks") {
+    //    mode_ = Mode::Bookmarks;
+    //    update_list();
+    //    return;
+    //}
+    //else if (text.empty()) {
+    //    mode_ = Mode::Command;
+    //    update_list();
+    //    return;
+    //}
+    if (text.size() >= 2 && text[1] == L':' && (text[2] == L'/' || text[2] == L'\\')) {
         // Looks like C:\ or C:/ path
         mode_ = Mode::FileBrowser;
         size_t lastsep = text.find_last_of(L"\\/");
@@ -250,12 +261,13 @@ void MainWindow::parse_input(const std::wstring& text) {
         std::wstring pat = (lastsep != std::wstring::npos) ? text.substr(lastsep + 1) : L"";
         browser_.set_cwd(dir);
         browser_.update(pat, show_hidden_);
+        SendMessage(combo_mode_, CB_SETCURSEL, 0, 0);
         update_list();
         return;
     }
     // default: command mode
-    mode_ = Mode::Command;
-    update_list();
+    //mode_ = Mode::Command;
+    //update_list();
 }
 
 // Activation methods: what to do when Enter/Double-click
@@ -578,6 +590,7 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
         if (wParam == VK_BACK && (GetKeyState(VK_MENU) & 0x8000)) {
             return self->processAltBackspace();
         }
+        break;
 	case WM_CHAR: {
 		LRESULT res = DefSubclassProc(hEdit, msg, wParam, lParam);
 		// Allow only printable (`wParam >= 32`) to reach your parse logic
@@ -594,40 +607,59 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
     return DefSubclassProc(hEdit, msg, wParam, lParam);
 }
 
-LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (!self) return DefWindowProcW(hwnd, msg, wParam, lParam);
-    switch (msg) {
-    case WM_HOTKEY:
-        if (wParam == 1)
-            self->show(!IsWindowVisible(hwnd));
-        return 0;
-    case WM_COMMAND:
-        if (HIWORD(wParam) == LBN_DBLCLK && LOWORD(wParam) == 2) {
+const LRESULT& MainWindow::processWMCommand(WPARAM wParam) {
+    if (LOWORD(wParam) == 2) {
+        // list
+        if (HIWORD(wParam) == LBN_DBLCLK) {
             // double click in listbox is same as Enter
             if (self->mode_ == Mode::Command) self->activate_command(self->sel_);
             else if (self->mode_ == Mode::FileBrowser) self->activate_filebrowser(self->sel_);
             else if (self->mode_ == Mode::History) self->activate_history(self->sel_);
             else if (self->mode_ == Mode::Bookmarks) self->activate_bookmarks(self->sel_);
             SetWindowTextW(self->edit_, L"");
-            return 0;
         }
-        if (HIWORD(wParam) == LBN_SELCHANGE && LOWORD(wParam) == 2)
-            self->sel_ = (int)SendMessageW(self->listbox_, LB_GETCURSEL, 0, 0);
-        break;
-    case WM_ACTIVATE:
-        if (wParam == WA_INACTIVE)
-            self->show(false);
-        break;
-    case WM_DESTROY:
-        self->save_all();
-        PostQuitMessage(0); break;
-    case WM_CTLCOLORLISTBOX: {
-        HDC hdc = (HDC)wParam;
-        SetBkColor(hdc, RGB(245, 245, 245));   // Soft gray
-        SetTextColor(hdc, RGB(25, 25, 25));   // Near black
-        static HBRUSH hbr = CreateSolidBrush(RGB(245, 245, 245));
-        return (INT_PTR)hbr;
+        else if (HIWORD(wParam) == LBN_SELCHANGE == 2){
+			self->sel_ = (int)SendMessageW(self->listbox_, LB_GETCURSEL, 0, 0);
+        }
     }
+    else if (LOWORD(wParam) == 3 ) {
+		// combo
+        if (HIWORD(wParam) == CBN_SELCHANGE) {
+			int sel = (int)SendMessageW(self->combo_mode_, CB_GETCURSEL, 0, 0);
+			switch (sel) {
+			case 0: self->set_mode(Mode::FileBrowser); break;
+			case 1: self->set_mode(Mode::Bookmarks); break;
+			case 2: self->set_mode(Mode::History); break;
+			case 3: self->set_mode(Mode::Command); break;
+			}
+			SetFocus(self->edit_);
+		}
+	}
+	return 0;
+}
+LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	if (!self) return DefWindowProcW(hwnd, msg, wParam, lParam);
+	switch (msg) {
+	case WM_HOTKEY:
+		if (wParam == 1)
+			self->show(!IsWindowVisible(hwnd));
+		return 0;
+	case WM_COMMAND:
+		return self->processWMCommand(wParam);
+	case WM_ACTIVATE:
+		if (wParam == WA_INACTIVE)
+			self->show(false);
+		break;
+	case WM_DESTROY:
+		self->save_all();
+		PostQuitMessage(0); break;
+	case WM_CTLCOLORLISTBOX: {
+		HDC hdc = (HDC)wParam;
+		SetBkColor(hdc, RGB(245, 245, 245));   // Soft gray
+		SetTextColor(hdc, RGB(25, 25, 25));   // Near black
+		static HBRUSH hbr = CreateSolidBrush(RGB(245, 245, 245));
+		return (INT_PTR)hbr;
+	}
 
     case WM_CTLCOLOREDIT: {
         HDC hdc = (HDC)wParam;

@@ -13,6 +13,7 @@ class MainWindow {
 public:
     MainWindow(HINSTANCE hInstance);
     bool create();
+    void set_mode(Mode mode);
     void show(bool visible);
     void run();
 
@@ -50,6 +51,7 @@ private:
     const LRESULT& processAltBackspace();
     const LRESULT& processBackspace();
 
+    const LRESULT& processWMCommand(WPARAM wpParam);
     LRESULT undo_delete_word();
 
     static MainWindow* self;
