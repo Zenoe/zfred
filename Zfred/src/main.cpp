@@ -4,7 +4,7 @@
 //using namespace Gdiplus;
 //ULONG_PTR gdiplusToken;
 
-int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
+int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ PWSTR pCmdLine, _In_ int nCmdShow){
     HANDLE hMutex = CreateMutexW(NULL, TRUE, L"zfred_SINGLETON_MUTEX");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         // Optionally: find the existing window and bring it to foreground, then exit
@@ -18,7 +18,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     //GdiplusStartupInput gdiplusStartupInput;
     //GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
-    MainWindow app(hInst);
+    MainWindow app(hInstance);
     if (!app.create())
         return 1;
     app.show(true); // Start hidden

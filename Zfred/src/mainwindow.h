@@ -7,6 +7,10 @@
 #include "bookmarks.h"
 #include "utils/simpleundo.h"
 
+#define WM_HISTORY_APPENDED (WM_USER + 101)
+#define WM_DEBOUNCED_UPDATE_LIST (WM_USER + 102)
+#define SPINNER_TIMER_ID 1001
+
 enum class Mode { Command, FileBrowser, History, Bookmarks };
 
 class MainWindow {
@@ -24,6 +28,7 @@ private:
     int sel_;
     bool show_hidden_;
 
+    int spinner_frame_ = 0;
     CommandLibrary commands_;
     FileBrowser browser_;
     HistoryManager history_;
@@ -31,6 +36,9 @@ private:
     
     SimpleUndo simpleundo_;
 
+    std::atomic<bool> queued_update_ = false;
+    std::atomic<bool> show_spinner_ = false;
+    std::chrono::steady_clock::time_point spinner_start_time_;
     
     // State: last input, for context
     std::wstring last_input_;
@@ -50,6 +58,11 @@ private:
 
     const LRESULT& processAltBackspace();
     const LRESULT& processBackspace();
+    const LRESULT& processAppendHistory();
+
+    void on_history_appended();
+    void update_spinner();
+
 
     const LRESULT& processWMCommand(WPARAM wpParam);
     LRESULT undo_delete_word();

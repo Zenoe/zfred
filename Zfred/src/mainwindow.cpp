@@ -20,12 +20,20 @@
 MainWindow* MainWindow::self = nullptr;
 
 MainWindow::MainWindow(HINSTANCE hInstance)
-    : hInstance_(hInstance), hwnd_(nullptr), edit_(nullptr), listbox_(nullptr),
+    : hInstance_(hInstance), hwnd_(nullptr), edit_(nullptr), listbox_(nullptr), combo_mode_(nullptr),
     mode_(Mode::Command), sel_(0), show_hidden_(false), last_input_(L"")
 {
     self = this;
-    history_.load();
     bookmarks_.load();
+    //history_.load();
+    history_.load_async([this]() {
+        PostMessageW(hwnd_, WM_HISTORY_APPENDED, 0, 0);
+        });
+    //history_.load_async([this](const std::vector<std::wstring>& batch) {  // 不要对const 使用 move
+    //history_.load_async([this](std::vector<std::wstring>& batch) {
+    //    auto* pBatch = new std::vector<std::wstring>(std::move(batch));
+    //    PostMessageW(hwnd_, WM_HISTORY_APPENDED, 0, reinterpret_cast<LPARAM>(pBatch));
+    //    });
 }
 
 bool MainWindow::create() {
@@ -106,7 +114,10 @@ void MainWindow::set_mode(Mode mode) {
 	switch (mode_) {
 	case Mode::FileBrowser: idx = 0; break;
 	case Mode::Bookmarks: idx = 1; break;
-	case Mode::History: idx = 2; break;
+    case Mode::History: {
+        idx = 2; 
+		break;
+    }
 	case Mode::Command: idx = 3; break;
 	}
 	SendMessageW(combo_mode_, CB_SETCURSEL, idx, 0);
@@ -173,22 +184,15 @@ void MainWindow::update_list() {
 //#ifdef _DEBUG
 //    OutputDebugPrint("last_input: " , last_input_.c_str());
 //#endif
-    if (mode_ == Mode::Command) {
-       if (last_input_.empty() && !history_.all().empty()) {
-            // Recent history
-            //for (const auto& h : history_.all()) {
-            //    std::wstring label = (PathIsDirectoryW(h.c_str()) ? L"🗂 " : L"🗎 ") + h;
-            //    SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
-            //}
-        }
-        else {
-            auto matches = commands_.filter(last_input_);
-            for (const auto* cmd : matches) {
-                std::wstring line = L"⚡ " + cmd->keyword + L"    — " + cmd->description;
-                SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)line.c_str());
-            }
-        }
-    }
+	if (mode_ == Mode::Command) {
+		auto matches = commands_.filter(last_input_);
+        OutputDebugPrint("matches:", commands_.all().size(), matches.size(), last_input_);
+		for (const auto* cmd : matches) {
+			std::wstring line = L"⚡ " + cmd->keyword + L"    — " + cmd->description;
+            OutputDebugPrint(line);
+			SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)line.c_str());
+		}
+	}
     else if (mode_ == Mode::FileBrowser) {
         //OutputDebugPrintVev( browser_.results());
         for (const auto& e : browser_.results()) {
@@ -206,19 +210,25 @@ void MainWindow::update_list() {
         }
     }
     else if (mode_ == Mode::History) {
-        for (const auto& h : history_.all()) {
-            std::wstring label = (PathIsDirectoryW(h.c_str()) ? L"🗂 " : L"🗎 ") + h;
-            SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
-        }
-    }
-    else if (mode_ == Mode::Bookmarks) {
-        for (const auto& b : bookmarks_.all()) {
-            std::wstring label = (PathIsDirectoryW(b.c_str()) ? L"🧡 " : L"♥ ") + b;
-            SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
-        }
-    }
-    int n = (int)SendMessageW(listbox_, LB_GETCOUNT, 0, 0);
-    sel_ = (n > 0) ? 0 : -1;
+
+		auto matches = history_.filter(last_input_);
+		for (const auto* item : matches) {
+			std::wstring label = (PathIsDirectoryW(item->c_str()) ? L"🗂 " : L"🗎 ") + *item;
+			SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
+		}
+		//for (const auto& h : history_.all()) {
+		//	std::wstring label = (PathIsDirectoryW(h.c_str()) ? L"🗂 " : L"🗎 ") + h;
+		//	SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
+		//}
+	}
+	else if (mode_ == Mode::Bookmarks) {
+		for (const auto& b : bookmarks_.all()) {
+			std::wstring label = (PathIsDirectoryW(b.c_str()) ? L"🧡 " : L"♥ ") + b;
+			SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
+		}
+	}
+	int n = (int)SendMessageW(listbox_, LB_GETCOUNT, 0, 0);
+	sel_ = (n > 0) ? 0 : -1;
 
 	if (n > 0) {
         // can be history or file/folder list
@@ -262,12 +272,15 @@ void MainWindow::parse_input(const std::wstring& text) {
         browser_.set_cwd(dir);
         browser_.update(pat, show_hidden_);
         SendMessage(combo_mode_, CB_SETCURSEL, 0, 0);
-        update_list();
-        return;
     }
+    else if (mode_ == Mode::History) {
+        history_.filter(text);
+    }
+    else {
+		mode_ = Mode::Command;
+    }
+	update_list();
     // default: command mode
-    //mode_ = Mode::Command;
-    //update_list();
 }
 
 // Activation methods: what to do when Enter/Double-click
@@ -384,9 +397,10 @@ void MainWindow::autofill_input_by_selection() {
             text = bm[sel_];
     }
     else if (mode_ == Mode::History) {
-        const auto& h = history_.all();
-        if (sel_ >= 0 && sel_ < (int)h.size())
-            text = h[sel_];
+        //const auto& h = history_.all();
+        auto matches = history_.filter(last_input_);
+        if (sel_ >= 0 && sel_ < (int)matches.size())
+            text = *matches[sel_];
     }
 
     if (!text.empty()) {
@@ -458,7 +472,7 @@ void MainWindow::file_actions_menu(const std::wstring& path) {
 const LRESULT& MainWindow::processAltBackspace() {
 	wchar_t buf[512];
 	GetWindowTextW(self->edit_, buf, 511);
-	DWORD sel = SendMessage(self->edit_, EM_GETSEL, NULL, NULL);
+	DWORD sel = (DWORD)SendMessage(self->edit_, EM_GETSEL, NULL, NULL);
 	//OutputDebugPrint(LOWORD(sel), HIWORD(sel));
 	DWORD endpos = HIWORD(sel);
 
@@ -466,40 +480,85 @@ const LRESULT& MainWindow::processAltBackspace() {
 	//OutputDebugPrint("deleted text: ", deleted);
 	self->simpleundo_.push(deletedText, endpos - deletedText.size());
 	SetWindowTextW(self->edit_, newText.c_str());
-	int newCursorPos = endpos - deletedText.size();
+	size_t newCursorPos = endpos - deletedText.size();
 	SendMessageW(self->edit_, EM_SETSEL, newCursorPos, newCursorPos);
 	return 0;
 }
 
 const LRESULT& MainWindow::processBackspace()
 {
+	wchar_t buffer[512];
+	GetWindowTextW(self->edit_, buffer, 511);
+	std::wstring text = buffer;
+    OutputDebugPrint("text:", text);
 	if (self->mode_ == Mode::FileBrowser) {
 		// cut one path section on each key stroke
-		wchar_t buffer[512];
-		GetWindowTextW(self->edit_, buffer, 511);
-        std::wstring text = buffer;
-        size_t pos = text.length() ? text.length() - 1 : 0;
-        // Remove trailing slash/backslash if present
-        if (pos && (text[pos] == L'\\' || text[pos] == L'/')) --pos;
-        size_t last_sep = text.rfind(L'\\', pos);
-        size_t last_slash = text.rfind(L'/', pos);
-        size_t cut = (last_sep == std::wstring::npos) ? last_slash : (last_slash == std::wstring::npos ? last_sep : (std::max)(last_sep, last_slash));
-        if (cut != std::wstring::npos) {
-            text.erase(cut + 2);
-            SetWindowTextW(self->edit_, text.c_str());
-        }
-        else {
-            // If no slash, clear box
-            SetWindowTextW(self->edit_, L"");
-        }
-        // Move the caret to the end
-        int len = GetWindowTextLengthW(self->edit_);
-        SendMessageW(self->edit_, EM_SETSEL, len, len);
-        self->parse_input(text);
+		size_t pos = text.length() ? text.length() - 1 : 0;
+		// Remove trailing slash/backslash if present
+		if (pos && (text[pos] == L'\\' || text[pos] == L'/')) --pos;
+		size_t last_sep = text.rfind(L'\\', pos);
+		size_t last_slash = text.rfind(L'/', pos);
+		size_t cut = (last_sep == std::wstring::npos) ? last_slash : (last_slash == std::wstring::npos ? last_sep : (std::max)(last_sep, last_slash));
+		if (cut != std::wstring::npos) {
+			text.erase(cut + 2);
+			SetWindowTextW(self->edit_, text.c_str());
+		}
+		else {
+			// If no slash, clear box
+			SetWindowTextW(self->edit_, L"");
+		}
+		// Move the caret to the end
+		int len = GetWindowTextLengthW(self->edit_);
+		SendMessageW(self->edit_, EM_SETSEL, len, len);
+		self->parse_input(text);
+	}
+	else {
+        // the text is the text before executing backspace
+		last_input_ = text.substr(0, text.size() - 1);
+		self->update_list();
+	}
+	return 0;
+}
+
+void MainWindow::on_history_appended() {
+    show_spinner_ = true;
+    spinner_start_time_ = std::chrono::steady_clock::now();
+    // Start spinner timer if not already started
+    SetTimer(hwnd_, SPINNER_TIMER_ID, 100, NULL);
+    //return;
+    // Debounce the update_list
+    if (!queued_update_.exchange(true)) {
+        std::thread([hwnd = hwnd_]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(120));
+            //PostMessageW(hwnd, WM_DEBOUNCED_UPDATE_LIST, 0, 0);
+            }).detach();
+    }
+}
+
+void MainWindow::update_spinner() {
+    if (!show_spinner_) {
+        // erase spinner, you may SetWindowTextW(spinner_label_, L"");
+        SetWindowTextW(edit_, L""); // blank or old value
+        return;
+    }
+    static const wchar_t* frames[] = { L"⠋", L"⠙", L"⠹", L"⠸", L"⠼", L"⠴", L"⠦", L"⠧", L"⠇", L"⠏" };
+    spinner_frame_ = (spinner_frame_ + 1) % (sizeof(frames) / sizeof(frames[0]));
+    std::wstring old; int len = GetWindowTextLengthW(edit_);
+    if (len) {
+        old.resize(len);
+        GetWindowTextW(edit_, &old[0], len + 1);
+    }
+    std::wstring spin = frames[spinner_frame_];
+    std::wstring display = L"Loading " + spin;
+    SetWindowTextW(edit_, display.c_str());
+}
+
+const LRESULT& MainWindow::processAppendHistory() {
+    if (mode_ == Mode::History) {
+        update_list();
     }
     return 0;
 }
-
 LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR) {
     if (!self) return DefSubclassProc(hEdit, msg, wParam, lParam);
     switch (msg) {
@@ -618,7 +677,7 @@ const LRESULT& MainWindow::processWMCommand(WPARAM wParam) {
             else if (self->mode_ == Mode::Bookmarks) self->activate_bookmarks(self->sel_);
             SetWindowTextW(self->edit_, L"");
         }
-        else if (HIWORD(wParam) == LBN_SELCHANGE == 2){
+        else if (HIWORD(wParam) == LBN_SELCHANGE){
 			self->sel_ = (int)SendMessageW(self->listbox_, LB_GETCURSEL, 0, 0);
         }
     }
@@ -672,6 +731,34 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         // Make client area work like a title bar for moving window
         ReleaseCapture();
         SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+        return 0;
+    case WM_HISTORY_APPENDED:
+    {
+        //auto batch = (std::vector<std::wstring>*)lParam;
+        //for (const std::wstring& h : *batch) {
+        //    std::wstring label = (PathIsDirectoryW(h.c_str()) ? L"🗂 " : L"🗎 ") + h;
+        //    SendMessageW(self->listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
+        //}
+        //delete batch;
+        return self->processAppendHistory();
+        //self->on_history_appended();
+        return 0;
+    }
+    case WM_DEBOUNCED_UPDATE_LIST:
+        self->queued_update_ = false;
+        self->update_list();
+        // When done loading, stop showing spinner:
+        if (self->history_.loaded_done()) { // you need to implement loaded_done()
+            self->show_spinner_ = false;
+            KillTimer(hwnd, SPINNER_TIMER_ID);
+            self->update_spinner();
+        }
+        return 0;
+
+    case WM_TIMER:
+        if (wParam == SPINNER_TIMER_ID) {
+            self->update_spinner();
+        }
         return 0;
     default:
         return DefWindowProcW(hwnd, msg, wParam, lParam);
