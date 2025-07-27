@@ -13,8 +13,8 @@ namespace string_util {
     inline char    to_lower(char ch) { return std::tolower(static_cast<unsigned char>(ch)); }
 
     // Fuzzy match: all chars of pattern appear in order in str (case-insensitive)
-    template<typename String>
-    bool fuzzy_match(const String& pattern, const String& str) {
+    template<typename T>
+    bool fuzzy_match(const T& pattern, const T& str) {
         if (pattern.empty()) return true;
         size_t pi = 0;
         for (auto c : str) {

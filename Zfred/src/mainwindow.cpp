@@ -94,15 +94,6 @@ bool MainWindow::create() {
 
     SendMessageW(listbox_, WM_SETFONT, (WPARAM)hFont, TRUE);
 
-    hListview_ = CreateWindowW(WC_LISTVIEWW, L"",
-        WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_OWNERDATA | LVS_SINGLESEL ,
-		PADDING, PADDING + EDIT_H + CONTROL_MARGIN, LIST_W, 200,
-         hwnd_, (HMENU)2, GetModuleHandle(nullptr), nullptr);
-    LVCOLUMNW col = { 0 };
-    col.mask = LVCF_TEXT | LVCF_WIDTH;
-    col.pszText = (LPWSTR)L"path";
-    col.cx = LIST_W;
-    ListView_InsertColumn(hListview_, 0, &col);
 
     //ListView_SetItemCountEx(hListview_, 4, LVSICF_NOINVALIDATEALL);
     combo_mode_ = CreateWindowExW(0, L"COMBOBOX", nullptr,
@@ -194,24 +185,26 @@ LRESULT MainWindow::undo_delete_word() {
 
 void MainWindow::update_listview() {
     if (mode_ == Mode::History) {
-		history_.filterModifyItem(last_input_);
-		ListView_SetItemCountEx(hListview_, history_.all().size(), LVSICF_NOINVALIDATEALL);
-        // Force update visible rows
-        InvalidateRect(hListview_, NULL, TRUE);
-        UpdateWindow(hListview_);
+		// history_.filterModifyItem(last_input_);
+		history_.filterModifyItemThread(last_input_, [this](){
+            ListView_SetItemCountEx(this->hListview_, this->history_.all().size(), LVSICF_NOINVALIDATEALL);
+            // Force update visible rows
+            InvalidateRect(this->hListview_, NULL, TRUE);
+            UpdateWindow(this->hListview_);
+        });
     }
 }
 void MainWindow::update_list() {
     SendMessageW(listbox_, LB_RESETCONTENT, 0, 0);
     sel_ = 0;
-	if (mode_ == Mode::Command) {
-		auto matches = commands_.filter(last_input_);
-		for (const auto* cmd : matches) {
-			std::wstring line = L"⚡ " + cmd->keyword + L"    — " + cmd->description;
+    if (mode_ == Mode::Command) {
+        auto matches = commands_.filter(last_input_);
+        for (const auto* cmd : matches) {
+            std::wstring line = L"⚡ " + cmd->keyword + L"    — " + cmd->description;
             OutputDebugPrint(line);
-			SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)line.c_str());
-		}
-	}
+            SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)line.c_str());
+        }
+    }
     else if (mode_ == Mode::FileBrowser) {
         for (const auto& e : browser_.results()) {
             std::wstring disp;
@@ -227,20 +220,20 @@ void MainWindow::update_list() {
         }
     }
     else if (mode_ == Mode::History) {
-		auto matches = history_.filter(last_input_);
-		for (const auto* item : matches) {
-			std::wstring label = (PathIsDirectoryW(item->c_str()) ? L"🗂 " : L"🗎 ") + *item;
-			SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
-		}
-	}
-	else if (mode_ == Mode::Bookmarks) {
-		for (const auto& b : bookmarks_.all()) {
-			std::wstring label = (PathIsDirectoryW(b.c_str()) ? L"🧡 " : L"♥ ") + b;
-			SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
-		}
-	}
-	int n = (int)SendMessageW(listbox_, LB_GETCOUNT, 0, 0);
-	sel_ = (n > 0) ? 0 : -1;
+        auto matches = history_.filter(last_input_);
+        for (const auto* item : matches) {
+            std::wstring label = (PathIsDirectoryW(item->c_str()) ? L"🗂 " : L"🗎 ") + *item;
+            SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
+        }
+    }
+    else if (mode_ == Mode::Bookmarks) {
+        for (const auto& b : bookmarks_.all()) {
+            std::wstring label = (PathIsDirectoryW(b.c_str()) ? L"🧡 " : L"♥ ") + b;
+            SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
+        }
+    }
+    int n = (int)SendMessageW(listbox_, LB_GETCOUNT, 0, 0);
+    sel_ = (n > 0) ? 0 : -1;
 
 	if (n > 0) {
         // can be history or file/folder list
@@ -573,6 +566,7 @@ bool MainWindow::processListViewContent(LPARAM lParam) {
 		NMLVDISPINFOW* plvdi = (NMLVDISPINFOW*)lParam;
 		int iItem = plvdi->item.iItem;
 		if ((plvdi->item.mask & LVIF_TEXT) && iItem < (int)history_.all().size()) {
+            OutputDebugPrint("history size: ", history_.all().size());
 			// Compose label with folder/file unicode
 			const std::wstring& path = history_.all()[iItem];
 			// Simulate Dir/File (for demo, every 10th is dir), or use PathIsDirectoryW(path.c_str())
@@ -723,26 +717,37 @@ const LRESULT& MainWindow::processWMCommand(WPARAM wParam) {
 LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	if (!self) return DefWindowProcW(hwnd, msg, wParam, lParam);
 	switch (msg) {
-	case WM_HOTKEY:
-		if (wParam == 1)
-			self->show(!IsWindowVisible(hwnd));
-		return 0;
-	case WM_COMMAND:
-		return self->processWMCommand(wParam);
-	case WM_ACTIVATE:
-		if (wParam == WA_INACTIVE)
-			self->show(false);
-		break;
-	case WM_DESTROY:
-		self->save_all();
-		PostQuitMessage(0); break;
-	case WM_CTLCOLORLISTBOX: {
-		HDC hdc = (HDC)wParam;
-		SetBkColor(hdc, RGB(245, 245, 245));   // Soft gray
-		SetTextColor(hdc, RGB(25, 25, 25));   // Near black
-		static HBRUSH hbr = CreateSolidBrush(RGB(245, 245, 245));
-		return (INT_PTR)hbr;
-	}
+        case WM_CREATE:{
+            self->hListview_ = CreateWindowW(WC_LISTVIEWW, L"",
+                                       WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_OWNERDATA | LVS_SINGLESEL ,
+                                       PADDING, PADDING + EDIT_H + CONTROL_MARGIN, LIST_W, 0,
+                                       hwnd, (HMENU)2, GetModuleHandle(nullptr), nullptr);
+            LVCOLUMNW col = { 0 };
+            col.mask = LVCF_TEXT | LVCF_WIDTH;
+            col.pszText = (LPWSTR)L"";
+            col.cx = LIST_W;
+            ListView_InsertColumn(self->hListview_, 0, &col);
+        }
+    case WM_HOTKEY:
+        if (wParam == 1)
+            self->show(!IsWindowVisible(hwnd));
+        return 0;
+    case WM_COMMAND:
+        return self->processWMCommand(wParam);
+    case WM_ACTIVATE:
+        if (wParam == WA_INACTIVE)
+            self->show(false);
+        break;
+    case WM_DESTROY:
+        self->save_all();
+        PostQuitMessage(0); break;
+    case WM_CTLCOLORLISTBOX: {
+        HDC hdc = (HDC)wParam;
+        SetBkColor(hdc, RGB(245, 245, 245));   // Soft gray
+        SetTextColor(hdc, RGB(25, 25, 25));   // Near black
+        static HBRUSH hbr = CreateSolidBrush(RGB(245, 245, 245));
+        return (INT_PTR)hbr;
+    }
 
     case WM_CTLCOLOREDIT: {
         HDC hdc = (HDC)wParam;
@@ -786,12 +791,15 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             }
         }
         break;
-    case WM_SIZE:
+    case WM_SIZE:{
+        int width = LOWORD(lParam), height = HIWORD(lParam);
         if (self->hListview_) {
-            MoveWindow(self->hListview_, 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
+            // MoveWindow(self->hListview_, PADDING, PADDING + EDIT_H + CONTROL_MARGIN, LIST_W, height-EDIT_H, TRUE);
+            OutputDebugPrint("wm_size", height);
+            MoveWindow(self->hListview_, PADDING, PADDING + EDIT_H + CONTROL_MARGIN, width, height-EDIT_H, TRUE);
         }
         break;
-
+    }
     case WM_TIMER:
         if (wParam == SPINNER_TIMER_ID) {
             self->update_spinner();
