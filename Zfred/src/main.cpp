@@ -1,4 +1,5 @@
 ﻿#include "mainwindow.h"
+#include <commctrl.h>
 
 //#include <gdiplus.h>
 //using namespace Gdiplus;
@@ -15,6 +16,10 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
         }
         return 0; // exit, already running!
     }
+
+    INITCOMMONCONTROLSEX icex = { sizeof(icex), ICC_LISTVIEW_CLASSES };
+    InitCommonControlsEx(&icex);
+
     //GdiplusStartupInput gdiplusStartupInput;
     //GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 

@@ -22,7 +22,7 @@ void HistoryManager::add(const std::wstring& path) {
 }
 const std::deque<std::wstring>& HistoryManager::all() const { 
 	std::lock_guard<std::mutex> lock(items_mtx);
-	return items_;
+	return filtered_items_;
 }
 void HistoryManager::save() {
     std::wofstream out(L"alfred_history.txt");
@@ -90,26 +90,28 @@ void HistoryManager::load_async(std::function<void(std::vector<std::wstring>&)> 
 }
 
 //void load_async(void(*on_append)(const std::wstring&))
-void HistoryManager::load_async(std::function< void() > on_append) {
-	std::thread([this, on_append]() {
+void HistoryManager::load_async(std::function< void() > on_loaded) {
+	std::thread([this, on_loaded]() {
 		{
 			std::lock_guard<std::mutex> lock(this->items_mtx);
-			items_.clear();
+			this->items_.clear();
 		}
 
         std::wifstream in(L"alfred_history.txt");
         std::wstring s;
         while (std::getline(in, s)) if (!s.empty()) {
 			std::lock_guard<std::mutex> lock(this->items_mtx);
-            items_.push_back(s);
+            this->items_.push_back(s);
         }
+
         for (const auto& r : sys_util::loadSystemRecent()) {
             {
                 std::lock_guard<std::mutex> lk(this->items_mtx);
                 this->items_.push_back(r);
             }
         }
-		//on_append();
+        this->filtered_items_ = this->items_;
+		on_loaded();
 		loaded_.store(true);
 		//const std::vector<std::wstring> recentVec = sys_util::loadSystemRecent();
 		//{
@@ -126,8 +128,31 @@ bool HistoryManager::loaded_done() const{
     return loaded_.load();
 }
 
+void HistoryManager::filterModifyItem(const std::wstring& pat) {   
+    std::thread([&, this]() {
+		if (pat.empty()) {
+			std::lock_guard<std::mutex> lock(filtered_items_mtx);
+			//this->filtered_items_.resize(this->items_.size());
+			this->filtered_items_ = this->items_; // Restore all
+		}else {
+            {
+				std::lock_guard<std::mutex> lock(filtered_items_mtx);
+				this->filtered_items_.clear();
+            }
+            for (const auto& item : this->items_) {
+                if (string_util::fuzzy_match(pat, item)) {
+					std::lock_guard<std::mutex> lock(filtered_items_mtx);
+                    this->filtered_items_.push_back(item);
+                }
+            }
+        }
+        }).detach();
+		//items_.erase(std::remove_if(items_.begin(), items_.end(), [&](const std::wstring& item) {
+		//    return !string_util::fuzzy_match(pat, item);
+		//    }), items_.end());
+}
 
-std::vector<const std::wstring*> HistoryManager::filter(const std::wstring& pat) {   
+std::vector<const std::wstring*> HistoryManager::filter(const std::wstring& pat) const {   
     std::vector<const std::wstring*> result;
     for (const auto& item : items_) {
 		if (string_util::fuzzy_match(pat, item)) result.push_back(&item);

@@ -14,6 +14,6 @@ constexpr int LIST_BOTTOM_PADDING = 4;
 
 
 constexpr int WND_W = (PADDING << 1) + EDIT_W + COMBO_W + CONTROL_MARGIN;
-constexpr int WND_H = (PADDING << 1) + EDIT_H + CONTROL_MARGIN;
+constexpr int WND_H = (PADDING << 1) + EDIT_H + CONTROL_MARGIN + 300;
 
 constexpr int LIST_W = WND_W;

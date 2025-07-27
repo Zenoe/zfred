@@ -5,8 +5,11 @@
 #include <cwctype>
 #include <vector>
 #include <sstream>
+#include <commctrl.h>
+
 #include <algorithm>
 #include <dwmapi.h> // For DwmExtendFrameIntoClientArea (link with dwmapi.lib)
+
 #ifdef _DEBUG
 #include "debugtool.h"
 #endif
@@ -27,12 +30,12 @@ MainWindow::MainWindow(HINSTANCE hInstance)
     bookmarks_.load();
     //history_.load();
     history_.load_async([this]() {
-        PostMessageW(hwnd_, WM_HISTORY_APPENDED, 0, 0);
+        PostMessageW(hwnd_, WM_HISTORY_LOADED, 0, 0);
         });
     //history_.load_async([this](const std::vector<std::wstring>& batch) {  // 不要对const 使用 move
     //history_.load_async([this](std::vector<std::wstring>& batch) {
     //    auto* pBatch = new std::vector<std::wstring>(std::move(batch));
-    //    PostMessageW(hwnd_, WM_HISTORY_APPENDED, 0, reinterpret_cast<LPARAM>(pBatch));
+    //    PostMessageW(hwnd_, WM_HISTORY_LOADED, 0, reinterpret_cast<LPARAM>(pBatch));
     //    });
 }
 
@@ -82,15 +85,26 @@ bool MainWindow::create() {
 
     SendMessageW(edit_, WM_SETFONT, (WPARAM)hFont, TRUE);
 
-    listbox_ = CreateWindowExW(
-        WS_EX_CLIENTEDGE, L"LISTBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | LBS_DISABLENOSCROLL,
-        PADDING, PADDING+EDIT_H + CONTROL_MARGIN, LIST_W, 0,
-        hwnd_, (HMENU)2, hInstance_, nullptr);
+    //listbox_ = CreateWindowExW(
+    //    WS_EX_CLIENTEDGE, L"LISTBOX", nullptr,
+    //    WS_CHILD | WS_VISIBLE | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | LBS_DISABLENOSCROLL,
+    //    PADDING, PADDING+EDIT_H + CONTROL_MARGIN, LIST_W, 0,
+    //    hwnd_, (HMENU)2, hInstance_, nullptr);
 
 
     SendMessageW(listbox_, WM_SETFONT, (WPARAM)hFont, TRUE);
 
+    hListview_ = CreateWindowW(WC_LISTVIEWW, L"",
+        WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_OWNERDATA | LVS_SINGLESEL ,
+		PADDING, PADDING + EDIT_H + CONTROL_MARGIN, LIST_W, 200,
+         hwnd_, (HMENU)2, GetModuleHandle(nullptr), nullptr);
+    LVCOLUMNW col = { 0 };
+    col.mask = LVCF_TEXT | LVCF_WIDTH;
+    col.pszText = (LPWSTR)L"path";
+    col.cx = LIST_W;
+    ListView_InsertColumn(hListview_, 0, &col);
+
+    //ListView_SetItemCountEx(hListview_, 4, LVSICF_NOINVALIDATEALL);
     combo_mode_ = CreateWindowExW(0, L"COMBOBOX", nullptr,
         WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST,
          PADDING + EDIT_W +CONTROL_MARGIN, PADDING, COMBO_W, COMBO_H, hwnd_, (HMENU)3, hInstance_, nullptr);
@@ -98,9 +112,9 @@ bool MainWindow::create() {
     // After creating the ComboBox:
     SendMessageW(combo_mode_, CB_SETITEMHEIGHT, (WPARAM)-1, (LPARAM)(EDIT_H - 4));  // Adjust as needed
     SendMessageW(combo_mode_, WM_SETFONT, (WPARAM)hFont, TRUE);
+    SendMessageW(combo_mode_, CB_ADDSTRING, 0, (LPARAM)L"History");
     SendMessageW(combo_mode_, CB_ADDSTRING, 0, (LPARAM)L"FileBrowser");
     SendMessageW(combo_mode_, CB_ADDSTRING, 0, (LPARAM)L"Bookmarks");
-    SendMessageW(combo_mode_, CB_ADDSTRING, 0, (LPARAM)L"History");
     SendMessageW(combo_mode_, CB_ADDSTRING, 0, (LPARAM)L"Command");
     SendMessageW(combo_mode_, CB_SETCURSEL, 0, 0); 
 
@@ -130,7 +144,7 @@ void MainWindow::show(bool visible) {
 		SetActiveWindow(hwnd_);
 		SetWindowTextW(edit_, L"");
 		SetFocus(edit_);
-		mode_ = Mode::Command;
+		mode_ = Mode::History;
 		last_input_.clear();
 		update_list();
 	}
@@ -178,15 +192,20 @@ LRESULT MainWindow::undo_delete_word() {
 	return 0;
 }
 
+void MainWindow::update_listview() {
+    if (mode_ == Mode::History) {
+		history_.filterModifyItem(last_input_);
+		ListView_SetItemCountEx(hListview_, history_.all().size(), LVSICF_NOINVALIDATEALL);
+        // Force update visible rows
+        InvalidateRect(hListview_, NULL, TRUE);
+        UpdateWindow(hListview_);
+    }
+}
 void MainWindow::update_list() {
     SendMessageW(listbox_, LB_RESETCONTENT, 0, 0);
     sel_ = 0;
-//#ifdef _DEBUG
-//    OutputDebugPrint("last_input: " , last_input_.c_str());
-//#endif
 	if (mode_ == Mode::Command) {
 		auto matches = commands_.filter(last_input_);
-        OutputDebugPrint("matches:", commands_.all().size(), matches.size(), last_input_);
 		for (const auto* cmd : matches) {
 			std::wstring line = L"⚡ " + cmd->keyword + L"    — " + cmd->description;
             OutputDebugPrint(line);
@@ -194,11 +213,9 @@ void MainWindow::update_list() {
 		}
 	}
     else if (mode_ == Mode::FileBrowser) {
-        //OutputDebugPrintVev( browser_.results());
         for (const auto& e : browser_.results()) {
             std::wstring disp;
             if (e.is_parent) {
-                //OutputDebugPrint("e is paent  ", e.fullpath);
                 continue;
                 //disp = L"⤴ ..";
             }
@@ -210,16 +227,11 @@ void MainWindow::update_list() {
         }
     }
     else if (mode_ == Mode::History) {
-
 		auto matches = history_.filter(last_input_);
 		for (const auto* item : matches) {
 			std::wstring label = (PathIsDirectoryW(item->c_str()) ? L"🗂 " : L"🗎 ") + *item;
 			SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
 		}
-		//for (const auto& h : history_.all()) {
-		//	std::wstring label = (PathIsDirectoryW(h.c_str()) ? L"🗂 " : L"🗎 ") + h;
-		//	SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
-		//}
 	}
 	else if (mode_ == Mode::Bookmarks) {
 		for (const auto& b : bookmarks_.all()) {
@@ -253,16 +265,6 @@ void MainWindow::update_list() {
 
 void MainWindow::parse_input(const std::wstring& text) {
     last_input_ = text;
-    //if (text == L":b" || text == L"bm" || text == L"bookmarks") {
-    //    mode_ = Mode::Bookmarks;
-    //    update_list();
-    //    return;
-    //}
-    //else if (text.empty()) {
-    //    mode_ = Mode::Command;
-    //    update_list();
-    //    return;
-    //}
     if (text.size() >= 2 && text[1] == L':' && (text[2] == L'/' || text[2] == L'\\')) {
         // Looks like C:\ or C:/ path
         mode_ = Mode::FileBrowser;
@@ -279,8 +281,9 @@ void MainWindow::parse_input(const std::wstring& text) {
     else {
 		mode_ = Mode::Command;
     }
-	update_list();
-    // default: command mode
+    
+	update_listview();
+	//update_list();
 }
 
 // Activation methods: what to do when Enter/Double-click
@@ -515,7 +518,8 @@ const LRESULT& MainWindow::processBackspace()
 	else {
         // the text is the text before executing backspace
 		last_input_ = text.substr(0, text.size() - 1);
-		self->update_list();
+
+		self->update_listview();
 	}
 	return 0;
 }
@@ -554,11 +558,31 @@ void MainWindow::update_spinner() {
 }
 
 const LRESULT& MainWindow::processAppendHistory() {
-    if (mode_ == Mode::History) {
-        update_list();
-    }
+    ListView_SetItemCountEx(hListview_, history_.all().size(), LVSICF_NOINVALIDATEALL);
+
+    // for listbox
+    //if (mode_ == Mode::History) {
+    //    update_list();
+    //}
     return 0;
 }
+
+bool MainWindow::processListViewContent(LPARAM lParam) {
+    if (mode_ == Mode::History) {
+        //std::deque<std::wstring> items = history_.all(); // copy huge data, cause listview populating slow
+		NMLVDISPINFOW* plvdi = (NMLVDISPINFOW*)lParam;
+		int iItem = plvdi->item.iItem;
+		if ((plvdi->item.mask & LVIF_TEXT) && iItem < (int)history_.all().size()) {
+			// Compose label with folder/file unicode
+			const std::wstring& path = history_.all()[iItem];
+			// Simulate Dir/File (for demo, every 10th is dir), or use PathIsDirectoryW(path.c_str())
+            std::wstring label = (PathIsDirectoryW(path.c_str()) ? L"🗂 " : L"🗎 ") + path;
+			wcsncpy_s(plvdi->item.pszText, plvdi->item.cchTextMax, label.c_str(), _TRUNCATE);
+		}
+	}
+	return TRUE;
+}
+
 LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR) {
     if (!self) return DefSubclassProc(hEdit, msg, wParam, lParam);
     switch (msg) {
@@ -686,9 +710,9 @@ const LRESULT& MainWindow::processWMCommand(WPARAM wParam) {
         if (HIWORD(wParam) == CBN_SELCHANGE) {
 			int sel = (int)SendMessageW(self->combo_mode_, CB_GETCURSEL, 0, 0);
 			switch (sel) {
-			case 0: self->set_mode(Mode::FileBrowser); break;
-			case 1: self->set_mode(Mode::Bookmarks); break;
-			case 2: self->set_mode(Mode::History); break;
+			case 0: self->set_mode(Mode::History); break;
+			case 1: self->set_mode(Mode::FileBrowser); break;
+			case 2: self->set_mode(Mode::Bookmarks); break;
 			case 3: self->set_mode(Mode::Command); break;
 			}
 			SetFocus(self->edit_);
@@ -732,7 +756,7 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         ReleaseCapture();
         SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
         return 0;
-    case WM_HISTORY_APPENDED:
+    case WM_HISTORY_LOADED:
     {
         //auto batch = (std::vector<std::wstring>*)lParam;
         //for (const std::wstring& h : *batch) {
@@ -754,6 +778,19 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             self->update_spinner();
         }
         return 0;
+
+    case WM_NOTIFY:
+        if ((HWND)((LPNMHDR)lParam)->hwndFrom == self->hListview_) {
+            if (((LPNMHDR)lParam)->code == LVN_GETDISPINFOW) {
+                self->processListViewContent(lParam);
+            }
+        }
+        break;
+    case WM_SIZE:
+        if (self->hListview_) {
+            MoveWindow(self->hListview_, 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
+        }
+        break;
 
     case WM_TIMER:
         if (wParam == SPINNER_TIMER_ID) {

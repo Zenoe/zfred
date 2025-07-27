@@ -7,7 +7,7 @@
 #include "bookmarks.h"
 #include "utils/simpleundo.h"
 
-#define WM_HISTORY_APPENDED (WM_USER + 101)
+#define WM_HISTORY_LOADED (WM_USER + 101)
 #define WM_DEBOUNCED_UPDATE_LIST (WM_USER + 102)
 #define SPINNER_TIMER_ID 1001
 
@@ -24,6 +24,7 @@ public:
 private:
     HINSTANCE hInstance_;
     HWND hwnd_, edit_, listbox_, combo_mode_;
+    HWND hListview_ = nullptr;
     Mode mode_;
     int sel_;
     bool show_hidden_;
@@ -43,6 +44,7 @@ private:
     // State: last input, for context
     std::wstring last_input_;
 
+    void update_listview();
     void update_list();
     void parse_input(const std::wstring& text);
 
@@ -60,6 +62,8 @@ private:
     const LRESULT& processBackspace();
     const LRESULT& processAppendHistory();
 
+    //bool processListViewContent(LPARAM lParam, const std::vector<std::wstring>& items);
+    bool processListViewContent(LPARAM lParam);
     void on_history_appended();
     void update_spinner();
 
