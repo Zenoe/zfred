@@ -2,6 +2,8 @@
 using namespace Gdiplus;
 
 //#pragma comment(lib, "gdiplus.lib")
+
+// this would make the corner jagged
 void GuiHelper::SetWindowRoundRgn(HWND hwnd, int width, int height, int radius)
 {
     HRGN hRgn = CreateRoundRectRgn(0, 0, width, height, radius, radius);

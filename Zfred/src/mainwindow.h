@@ -11,8 +11,16 @@
 #define WM_DEBOUNCED_UPDATE_LIST (WM_USER + 102)
 #define SPINNER_TIMER_ID 1001
 
-enum class Mode { Command, FileBrowser, History, Bookmarks };
-
+enum class Mode { History, FileBrowser, Command, Bookmarks, Count };
+inline const wchar_t* ModeToString(Mode mode) {
+    switch (mode) {
+    case Mode::Command:      return L"Command";
+    case Mode::FileBrowser:  return L"FileBrowser";
+    case Mode::History:      return L"History";
+    case Mode::Bookmarks:    return L"Bookmarks";
+    default:                 return L"Unknown";
+    }
+}
 class MainWindow {
 public:
     MainWindow(HINSTANCE hInstance);
@@ -58,6 +66,7 @@ private:
 
     void save_all();
 
+    void selectListview(int sel);
     const LRESULT& processAltBackspace();
     const LRESULT& processBackspace();
     const LRESULT& processAppendHistory();
@@ -68,6 +77,7 @@ private:
     void update_spinner();
 
 
+    void processListviewNavigation(int direction);
     const LRESULT& processWMCommand(WPARAM wpParam);
     LRESULT undo_delete_word();
 
