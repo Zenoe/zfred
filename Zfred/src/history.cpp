@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include "utils/stringutil.h"
 #include "debugtool.h"
+#include "utils/ahocorasick.h"
 
 void HistoryManager::add(const std::wstring& path) {
     if (path.empty()) return;
@@ -200,7 +201,15 @@ void HistoryManager::filterModifyItemThread(const std::wstring& pat, std::functi
 			// 局部变量做筛选，避免反复加锁
 			std::deque<std::wstring> result;
 			for (const auto& item : items_copy) {
-				if (string_util::fuzzy_match(pat, item)) {
+				//if (string_util::fuzzy_match(pat, item)) {
+				std::vector<std::wstring_view> pattern_views;
+				std::vector<std::wstring> pats = string_util::split_by_space(pat);
+				pattern_views.reserve(pats.size());
+				for (const auto& s : pats)
+					pattern_views.push_back(s);
+
+				std::wstring_view item_view(item);
+				if (ah_substring_match(pattern_views, item_view)) {
 					result.push_back(item);
 				}
 			}

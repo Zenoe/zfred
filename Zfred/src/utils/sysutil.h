@@ -4,4 +4,5 @@
 
 namespace sys_util {
 	std::vector<std::wstring> loadSystemRecent();
+	std::vector<std::wstring> GetQuickAccessItems();
 }

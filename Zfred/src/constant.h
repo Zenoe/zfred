@@ -3,7 +3,7 @@
 constexpr int PADDING = 8;
 //constexpr int EDIT_W = WND_W - (PADDING << 1);
 constexpr int EDIT_W = 560;
-constexpr int EDIT_H = 32;
+constexpr int EDIT_H = 24;
 constexpr int COMBO_W = 128;
 constexpr int COMBO_H = 320;
 

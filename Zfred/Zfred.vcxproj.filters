@@ -58,6 +58,9 @@
     <ClInclude Include="src\utils\simpleundo.h">
       <Filter>src\utils</Filter>
     </ClInclude>
+    <ClInclude Include="src\utils\ahocorasick.h">
+      <Filter>src\utils</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\bookmarks.cpp">

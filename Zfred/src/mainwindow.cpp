@@ -18,10 +18,7 @@
 #include "utils/stringutil.h"
 
 //#include "guihelper.h"
-
-// static instance pointer
 MainWindow* MainWindow::self = nullptr;
-
 MainWindow::MainWindow(HINSTANCE hInstance)
     : hInstance_(hInstance), hwnd_(nullptr), edit_(nullptr), listbox_(nullptr), combo_mode_(nullptr),
     mode_(Mode::Command), sel_(-1), show_hidden_(false), last_input_(L"")
@@ -124,7 +121,12 @@ void MainWindow::show(bool visible) {
 }
 
 void MainWindow::run() {
+#ifdef _DEBUG
+    RegisterHotKey(hwnd_, 1, MOD_CONTROL | MOD_ALT, VK_SPACE);
+#else
     RegisterHotKey(hwnd_, 1, MOD_ALT, VK_SPACE);
+#endif // DEBUG
+
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0)) {
         TranslateMessage(&msg);
@@ -194,7 +196,10 @@ void MainWindow::update_list() {
         auto matches = commands_.filter(last_input_);
         for (const auto* cmd : matches) {
             std::wstring line = L"⚡ " + cmd->keyword + L"    — " + cmd->description;
+#ifdef _DEBUG
             OutputDebugPrint(line);
+#endif // DEBUG
+
             SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)line.c_str());
         }
     }
@@ -329,19 +334,19 @@ void MainWindow::activate_filebrowser(int idx) {
 void MainWindow::activate_history(int idx) {
 	history_.withItems([&](const auto& hist) {
 		if (idx >= 0 && idx < (int)hist.size()) {
-			std::wstring sel = hist[idx];
-			if (PathIsDirectoryW(sel.c_str())) {
+			std::wstring curItem = hist[idx];
+			if (PathIsDirectoryW(curItem.c_str())) {
 				mode_ = Mode::FileBrowser;
-				browser_.set_cwd(sel);
+				browser_.set_cwd(curItem);
 				browser_.update(L"", show_hidden_);
-				SetWindowTextW(edit_, sel.c_str());
-				update_list();
+				SetWindowTextW(edit_, curItem.c_str());
+                update_listview();
 			}
 			else {
-				fileactions::launch(sel);
+				fileactions::launch(curItem);
 				show(false);
 			}
-			history_.add(sel);
+			history_.add(curItem);
 		}
 		});
 }
@@ -406,7 +411,7 @@ void MainWindow::autofill_input_by_selection() {
                 if (e.is_dir || e.is_parent) {
                     browser_.set_cwd(e.fullpath + L"\\");
                     browser_.update(L"", show_hidden_);
-                    update_list();
+                    update_listview();
                 }
             }
         }
@@ -473,6 +478,8 @@ const LRESULT& MainWindow::processAltBackspace() {
 	SetWindowTextW(self->edit_, newText.c_str());
 	size_t newCursorPos = endpos - deletedText.size();
 	SendMessageW(self->edit_, EM_SETSEL, newCursorPos, newCursorPos);
+    last_input_ = newText;
+    update_listview();
 	return 0;
 }
 
@@ -481,7 +488,7 @@ const LRESULT& MainWindow::processBackspace()
 	wchar_t buffer[512];
 	GetWindowTextW(self->edit_, buffer, 511);
 	std::wstring text = buffer;
-    OutputDebugPrint("text:", text);
+    // OutputDebugPrint("text:", text);
 	if (self->mode_ == Mode::FileBrowser) {
 		// cut one path section on each key stroke
 		size_t pos = text.length() ? text.length() - 1 : 0;
@@ -612,26 +619,29 @@ void MainWindow::selectListview(int sel) {
 	// Ensure visible
 	SendMessageW(self->hListview_, LVM_ENSUREVISIBLE, (WPARAM)sel, (LPARAM)FALSE);
 }
+void MainWindow::processReturn() {
+	if (mode_ == Mode::Command) activate_command(sel_);
+	else if (mode_ == Mode::FileBrowser) activate_filebrowser(sel_);
+	else if (mode_ == Mode::History) activate_history(sel_);
+	else if (mode_ == Mode::Bookmarks) activate_bookmarks(sel_);
+	SetWindowTextW(edit_, L"");
+}
 LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR) {
-    if (!self) return DefSubclassProc(hEdit, msg, wParam, lParam);
-    switch (msg) {
-    case WM_KEYDOWN:
-        if (wParam == VK_RETURN) {
-            if (self->mode_ == Mode::Command) self->activate_command(self->sel_);
-            else if (self->mode_ == Mode::FileBrowser) self->activate_filebrowser(self->sel_);
-            else if (self->mode_ == Mode::History) self->activate_history(self->sel_);
-            else if (self->mode_ == Mode::Bookmarks) self->activate_bookmarks(self->sel_);
-            SetWindowTextW(hEdit, L"");
-            return 0;
-        }
-        else if (wParam == VK_TAB) {
+	if (!self) return DefSubclassProc(hEdit, msg, wParam, lParam);
+	switch (msg) {
+	case WM_KEYDOWN:
+		if (wParam == VK_RETURN) {
+			self->processReturn();
+			return 0;
+		}
+		else if (wParam == VK_TAB) {
 			if (self->sel_ == -1) {
 				self->processListviewNavigation(+1);
-            }
-            self->autofill_input_by_selection();
-            return 0;
-        }
-        else if (wParam == VK_DOWN || (wParam == L'N' && (GetKeyState(VK_CONTROL) & 0x8000))) {
+			}
+			self->autofill_input_by_selection();
+			return 0;
+		}
+		else if (wParam == VK_DOWN || (wParam == L'N' && (GetKeyState(VK_CONTROL) & 0x8000))) {
             //int n = (int)SendMessageW(self->listbox_, LB_GETCOUNT, 0, 0);
             //if (n == 0) return 0;
             //self->sel_ = (self->sel_ + 1) % n;
@@ -773,13 +783,14 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         case WM_CREATE:{
             self->hListview_ = CreateWindowW(WC_LISTVIEWW, L"",
                                        WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_OWNERDATA | LVS_SINGLESEL | LVS_NOCOLUMNHEADER | LVS_SHOWSELALWAYS,
-                                       PADDING, PADDING + EDIT_H + CONTROL_MARGIN, LIST_W, 0,
+                                       PADDING, PADDING + EDIT_H + CONTROL_MARGIN, 0, 0,
                                        hwnd, (HMENU)2, GetModuleHandle(nullptr), nullptr);
             LVCOLUMNW col = { 0 };
             col.mask = LVCF_TEXT | LVCF_WIDTH;
             col.pszText = (LPWSTR)L"";
             col.cx = LIST_W;
             ListView_InsertColumn(self->hListview_, 0, &col);
+            SetWindowSubclass(self->hListview_, &MainWindow::ListviewProc, 0, 0);
 			break;
         }
     case WM_HOTKEY:
@@ -863,4 +874,23 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         return DefWindowProcW(hwnd, msg, wParam, lParam);
     }
     return 0;
+}
+
+LRESULT CALLBACK MainWindow::ListviewProc(HWND hListview, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR)
+{
+    if (!self) return DefSubclassProc(hListview, msg, wParam, lParam);
+    if (msg == WM_KEYDOWN) {
+        if (wParam == VK_TAB) {
+            SetFocus(self->edit_);
+            return 0;
+        }
+        else if (wParam == VK_RETURN) {
+            int sel = ListView_GetNextItem(hListview, -1, LVNI_SELECTED);
+            if (sel >= 0) {
+                self->processReturn();
+            }
+            return 0;
+        }
+    }
+    return DefSubclassProc(hListview, msg, wParam, lParam);
 }

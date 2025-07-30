@@ -5,6 +5,7 @@
 #include <cctype>
 #include <algorithm>
 #include <locale>
+#include <vector>
 
 namespace string_util {
 
@@ -43,4 +44,37 @@ namespace string_util {
 
     // Delete one word backward (like Ctrl+Backspace)
     std::pair<std::wstring, std::wstring> delete_word_backward(const wchar_t* input, size_t from_pos);
+
+    // Helper for isspace (normal or wide char)
+    template<typename CharT>
+    bool is_space(CharT ch);
+
+    template<>
+    inline bool is_space<char>(char ch) {
+        return std::isspace(static_cast<unsigned char>(ch));
+    }
+
+    template<>
+    inline bool is_space<wchar_t>(wchar_t ch) {
+        return std::iswspace(ch);
+    }
+
+    // Template function for splitting
+    template<typename StringT>
+    std::vector<StringT> split_by_space(const StringT& str) {
+        using CharT = typename StringT::value_type;
+        std::vector<StringT> result;
+        size_t i = 0, n = str.length();
+        while (i < n) {
+            // skip spaces
+            while (i < n && is_space(str[i])) ++i;
+            size_t j = i;
+            // find next space
+            while (j < n && !is_space(str[j])) ++j;
+            if (i < j)
+                result.emplace_back(str.substr(i, j - i));
+            i = j;
+        }
+        return result;
+    }
 } // namespace string_util

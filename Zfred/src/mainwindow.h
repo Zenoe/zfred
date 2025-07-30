@@ -79,9 +79,11 @@ private:
 
     void processListviewNavigation(int direction);
     const LRESULT& processWMCommand(WPARAM wpParam);
+    void processReturn();
     LRESULT undo_delete_word();
 
     static MainWindow* self;
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l);
     static LRESULT CALLBACK EditProc(HWND, UINT, WPARAM, LPARAM, UINT_PTR, DWORD_PTR);
-};;
+    static LRESULT CALLBACK ListviewProc(HWND, UINT, WPARAM, LPARAM, UINT_PTR, DWORD_PTR);
+};
