@@ -27,7 +27,6 @@ const std::vector<FileEntry>& FileBrowser::results() const { return entries_; }
 void FileBrowser::update(const std::wstring& pattern, bool show_hidden) {
     show_hidden_ = show_hidden;
     entries_.clear();
-    OutputDebugPrint("pattern: ", pattern.c_str());
     fs::path bdir(cwd_.empty() ? L"." : cwd_);
     // don't need parent folder entry(..)
     //if (bdir.has_parent_path() || bdir.root_path() != bdir) {

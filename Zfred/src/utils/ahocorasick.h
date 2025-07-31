@@ -51,7 +51,6 @@ public:
         }
         // Build failure links (BFS)
         std::queue<Node*> q;
-        //for (Edge& e : root->nexts) {
 		for (typename Node::Edge& e : root->nexts){
             e.next->fail = root;
             q.push(e.next);

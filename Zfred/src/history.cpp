@@ -118,11 +118,13 @@ void HistoryManager::load_async(std::function< void() > on_loaded) {
 				}
 			}
 
+			for (const auto& r : sys_util::GetQuickAccessItems()) {
+				items_.push_back(r);
+				filtered_items_.push_back(r);
+			}
 			for (const auto& r : sys_util::loadSystemRecent()) {
-				{
-					items_.push_back(r);
-					filtered_items_.push_back(r);
-				}
+				items_.push_back(r);
+				filtered_items_.push_back(r);
 			}
 
 			// batch-insert with minmal locking

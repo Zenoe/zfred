@@ -25,7 +25,6 @@ class MainWindow {
 public:
     MainWindow(HINSTANCE hInstance);
     bool create();
-    void set_mode(Mode mode);
     void show(bool visible);
     void run();
 
@@ -67,9 +66,9 @@ private:
     void save_all();
 
     void selectListview(int sel);
-    const LRESULT& processAltBackspace();
-    const LRESULT& processBackspace();
-    const LRESULT& processAppendHistory();
+    LRESULT processAltBackspace();
+    LRESULT processBackspace();
+    LRESULT processAppendHistory();
 
     //bool processListViewContent(LPARAM lParam, const std::vector<std::wstring>& items);
     bool processListViewContent(LPARAM lParam);
@@ -78,7 +77,7 @@ private:
 
 
     void processListviewNavigation(int direction);
-    const LRESULT& processWMCommand(WPARAM wpParam);
+    LRESULT processWMCommand(WPARAM wpParam);
     void processReturn();
     LRESULT undo_delete_word();
 

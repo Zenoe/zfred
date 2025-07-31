@@ -4,12 +4,14 @@
 exclude list
 * TODO command listview
 * TODO bookmark listview
+* TODO quickly switching mode
+* Edit
+** TODO ctrl a
+** DONE ctrl / undo delete word
+* Listview
+** TODO goto first/last
+** TODO filebrowser switch to history, listview doesn't get updated
 
-
-
-
-
-* DONE ctrl / undo delete word
 
 
 * DONE set combo value while input filebrowser flag like c:/xx
