@@ -11,10 +11,9 @@
 #define WM_DEBOUNCED_UPDATE_LIST (WM_USER + 102)
 #define SPINNER_TIMER_ID 1001
 
-enum class Mode { History, FileBrowser, Command, Bookmarks, Count };
+enum class Mode { History, FileBrowser, Bookmarks, Count };
 inline const wchar_t* ModeToString(Mode mode) {
     switch (mode) {
-    case Mode::Command:      return L"Command";
     case Mode::FileBrowser:  return L"FileBrowser";
     case Mode::History:      return L"History";
     case Mode::Bookmarks:    return L"Bookmarks";
@@ -52,7 +51,7 @@ private:
     std::wstring last_input_;
 
     void update_listview();
-    void update_list();
+    //void update_list();
     void parse_input(const std::wstring& text);
 
     void activate_command(int idx);

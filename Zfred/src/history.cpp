@@ -182,6 +182,7 @@ void HistoryManager::filterModifyItemSync(const std::wstring& pat) {
 		//    }), items_.end());
 }
 void HistoryManager::filterModifyItemThread(const std::wstring& pat, std::function<void()> filterDone) {
+	// todo detach thread could exist after main thread exits
 	std::thread([&, filterDone, this]() {
 		if (pat.empty()) {
 			std::lock_guard<std::mutex> lock(filtered_items_mtx);
@@ -205,6 +206,7 @@ void HistoryManager::filterModifyItemThread(const std::wstring& pat, std::functi
 			for (const auto& item : items_copy) {
 				//if (string_util::fuzzy_match(pat, item)) {
 				std::vector<std::wstring_view> pattern_views;
+				// todo split_by_space 参数是引用, pat 可能在split_by_space中途执行过程中被外面修改
 				std::vector<std::wstring> pats = string_util::split_by_space(pat);
 				pattern_views.reserve(pats.size());
 				for (const auto& s : pats)

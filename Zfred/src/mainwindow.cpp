@@ -10,6 +10,8 @@
 #include <algorithm>
 #include <dwmapi.h> // For DwmExtendFrameIntoClientArea (link with dwmapi.lib)
 
+#include "FsUtils.h"
+
 #ifdef _DEBUG
 #include "debugtool.h"
 #endif
@@ -21,7 +23,7 @@
 MainWindow* MainWindow::self = nullptr;
 MainWindow::MainWindow(HINSTANCE hInstance)
     : hInstance_(hInstance), hwnd_(nullptr), edit_(nullptr), listbox_(nullptr), combo_mode_(nullptr),
-    mode_(Mode::Command), sel_(-1), show_hidden_(false), last_input_(L"")
+    mode_(Mode::History), sel_(-1), show_hidden_(false), last_input_(L"")
 {
     self = this;
     bookmarks_.load();
@@ -48,9 +50,11 @@ bool MainWindow::create() {
 
     int x = (GetSystemMetrics(SM_CXSCREEN) - WND_W) / 2, y = 100;
     LONG exStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED;
+    // WS_EX_APPWINDOW Forces window to show in taskbar/Alt-Tab (useful with popup windows) 
     hwnd_ = CreateWindowExW(exStyle,
         wc.lpszClassName, L"zfred",
-        WS_POPUP | WS_CLIPCHILDREN, x, y, WND_W, WND_H,
+        WS_POPUP | WS_CLIPCHILDREN,
+        x, y, WND_W, WND_H,
         nullptr, nullptr, hInstance_, nullptr);
     if (!hwnd_) return false;
 
@@ -108,11 +112,12 @@ void MainWindow::show(bool visible) {
 	if (visible) {
 		SetForegroundWindow(hwnd_);
 		SetActiveWindow(hwnd_);
-		SetWindowTextW(edit_, L"");
+		if (last_input_.empty()) {
+			mode_ = Mode::History;  // default/initial mode 
+			SetWindowTextW(edit_, L"");
+			update_listview();
+		}
 		SetFocus(edit_);
-		mode_ = Mode::History;
-		last_input_.clear();
-		update_listview();
 	}
 }
 
@@ -179,84 +184,85 @@ void MainWindow::update_listview() {
 			});
 	}
 	else if (mode_ == Mode::FileBrowser) {
-		OutputDebugPrint("browser_.results().size(): ", browser_.results().size());
+		// OutputDebugPrint("browser_.results().size(): ", browser_.results().size());
 		ListView_SetItemCountEx(this->hListview_, browser_.results().size(), LVSICF_NOINVALIDATEALL);
 		// Force update visible rows
 		InvalidateRect(this->hListview_, NULL, TRUE);
 		UpdateWindow(this->hListview_);
-	}
+	}else if(mode_ == Mode::Bookmarks){
+
+    }
 	sel_ = -1;
 	//if (sel_ >= 0){
 		//ListView_SetItemState(hListview_, sel_, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
-
         //LONG_PTR style = GetWindowLongPtr(hListview_, GWL_STYLE);
         //SetWindowLongPtr(hListview_, GWL_STYLE, style | LVS_SHOWSELALWAYS);
     //}
 }
-void MainWindow::update_list() {
-    SendMessageW(listbox_, LB_RESETCONTENT, 0, 0);
-    sel_ = 0;
-    if (mode_ == Mode::Command) {
-        auto matches = commands_.filter(last_input_);
-        for (const auto* cmd : matches) {
-            std::wstring line = L"⚡ " + cmd->keyword + L"    — " + cmd->description;
-#ifdef _DEBUG
-            OutputDebugPrint(line);
-#endif // DEBUG
-
-            SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)line.c_str());
-        }
-    }
-    else if (mode_ == Mode::FileBrowser) {
-        for (const auto& e : browser_.results()) {
-            std::wstring disp;
-            if (e.is_parent) {
-                continue;
-                //disp = L"⤴ ..";
-            }
-            else if (e.is_dir && e.is_hidden) disp = L"[HID][DIR] " + e.label;
-            else if (e.is_dir) disp = L"[DIR] " + e.label;
-            else if (e.is_hidden) disp = L"[HID] " + e.label;
-            else disp = L"   " + e.label;
-            SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)disp.c_str());
-        }
-    }
-    else if (mode_ == Mode::History) {
-        auto matches = history_.filter(last_input_);
-        for (const auto* item : matches) {
-            std::wstring label = (PathIsDirectoryW(item->c_str()) ? L"🗂 " : L"🗎 ") + *item;
-            SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
-        }
-    }
-    else if (mode_ == Mode::Bookmarks) {
-        for (const auto& b : bookmarks_.all()) {
-            std::wstring label = (PathIsDirectoryW(b.c_str()) ? L"🧡 " : L"♥ ") + b;
-            SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
-        }
-    }
-    int n = (int)SendMessageW(listbox_, LB_GETCOUNT, 0, 0);
-    sel_ = (n > 0) ? 0 : -1;
-
-	if (n > 0) {
-        // can be history or file/folder list
-		int item_height = (int)SendMessageW(listbox_, LB_GETITEMHEIGHT, 0, 0);
-
-		int visible_items = (n < MAX_ITEMS) ? n : MAX_ITEMS;
-		int list_height = (item_height * visible_items) + LIST_BOTTOM_PADDING;
-		int total_height = WND_H + CONTROL_MARGIN + list_height;
-
-		SetWindowPos(hwnd_, NULL, 0, 0, WND_W, total_height, SWP_NOMOVE | SWP_NOZORDER);
-		SetWindowPos(listbox_, NULL, 0, 0, LIST_W, list_height, SWP_NOMOVE | SWP_NOZORDER);
-
-		ShowWindow(listbox_, SW_SHOW);
-	}
-	else {
-		ShowWindow(listbox_, SW_HIDE);
-		SetWindowPos(hwnd_, NULL, 0, 0, WND_W, WND_H, SWP_NOMOVE | SWP_NOZORDER);
-	}
-    if (sel_ >= 0)
-        SendMessageW(listbox_, LB_SETCURSEL, sel_, 0);
-}
+//void MainWindow::update_list() {
+//    SendMessageW(listbox_, LB_RESETCONTENT, 0, 0);
+//    sel_ = 0;
+//    if (mode_ == Mode::Command) {
+//        auto matches = commands_.filter(last_input_);
+//        for (const auto* cmd : matches) {
+//            std::wstring line = L"⚡ " + cmd->keyword + L"    — " + cmd->description;
+//#ifdef _DEBUG
+//            OutputDebugPrint(line);
+//#endif // DEBUG
+//
+//            SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)line.c_str());
+//        }
+//    }
+//    else if (mode_ == Mode::FileBrowser) {
+//        for (const auto& e : browser_.results()) {
+//            std::wstring disp;
+//            if (e.is_parent) {
+//                continue;
+//                //disp = L"⤴ ..";
+//            }
+//            else if (e.is_dir && e.is_hidden) disp = L"[HID][DIR] " + e.label;
+//            else if (e.is_dir) disp = L"[DIR] " + e.label;
+//            else if (e.is_hidden) disp = L"[HID] " + e.label;
+//            else disp = L"   " + e.label;
+//            SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)disp.c_str());
+//        }
+//    }
+//    else if (mode_ == Mode::History) {
+//        auto matches = history_.filter(last_input_);
+//        for (const auto* item : matches) {
+//            std::wstring label = (PathIsDirectoryW(item->c_str()) ? L"🗂 " : L"🗎 ") + *item;
+//            SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
+//        }
+//    }
+//    else if (mode_ == Mode::Bookmarks) {
+//        for (const auto& b : bookmarks_.all()) {
+//            std::wstring label = (PathIsDirectoryW(b.c_str()) ? L"🧡 " : L"♥ ") + b;
+//            SendMessageW(listbox_, LB_ADDSTRING, 0, (LPARAM)label.c_str());
+//        }
+//    }
+//    int n = (int)SendMessageW(listbox_, LB_GETCOUNT, 0, 0);
+//    sel_ = (n > 0) ? 0 : -1;
+//
+//	if (n > 0) {
+//        // can be history or file/folder list
+//		int item_height = (int)SendMessageW(listbox_, LB_GETITEMHEIGHT, 0, 0);
+//
+//		int visible_items = (n < MAX_ITEMS) ? n : MAX_ITEMS;
+//		int list_height = (item_height * visible_items) + LIST_BOTTOM_PADDING;
+//		int total_height = WND_H + CONTROL_MARGIN + list_height;
+//
+//		SetWindowPos(hwnd_, NULL, 0, 0, WND_W, total_height, SWP_NOMOVE | SWP_NOZORDER);
+//		SetWindowPos(listbox_, NULL, 0, 0, LIST_W, list_height, SWP_NOMOVE | SWP_NOZORDER);
+//
+//		ShowWindow(listbox_, SW_SHOW);
+//	}
+//	else {
+//		ShowWindow(listbox_, SW_HIDE);
+//		SetWindowPos(hwnd_, NULL, 0, 0, WND_W, WND_H, SWP_NOMOVE | SWP_NOZORDER);
+//	}
+//    if (sel_ >= 0)
+//        SendMessageW(listbox_, LB_SETCURSEL, sel_, 0);
+//}
 
 void MainWindow::parse_input(const std::wstring& text) {
     last_input_ = text;
@@ -280,45 +286,45 @@ void MainWindow::parse_input(const std::wstring& text) {
             history_.filter(text);
         }
         else {
-            mode_ = Mode::Command;
+            mode_ = Mode::History;
         }
     }
 	update_listview();
 }
 
 // Activation methods: what to do when Enter/Double-click
-void MainWindow::activate_command(int idx) {
-    auto matches = commands_.filter(last_input_);
-    if (!last_input_.empty() && idx >= 0 && idx < (int)matches.size()) {
-        matches[idx]->action();
-        show(false);
-    }
-    else if (last_input_.empty() && idx >= 0 && idx < (int)history_.size()) {
-        std::wstring sel = history_.all()[idx];
-        if (PathIsDirectoryW(sel.c_str())) {
-            mode_ = Mode::FileBrowser;
-            browser_.set_cwd(sel);
-            browser_.update(L"", show_hidden_);
-            SetWindowTextW(edit_, sel.c_str());
-            update_list();
-        }
-        else {
-            fileactions::launch(sel);
-            show(false);
-        }
-        history_.add(sel);
-    }
-    else {
-        // just run
-        if (!last_input_.empty()) {
-            auto result = (INT_PTR)ShellExecuteW(nullptr, L"open", last_input_.c_str(), nullptr, nullptr, SW_SHOW);
-            if (result <= 32) {
-                MessageBoxW(hwnd_, (L"'" + last_input_ + L"' was not found in system PATH or could not be executed.").c_str(),
-                    L"Command failed", MB_OK | MB_ICONWARNING);
-            }
-        }
-    }
-}
+// void MainWindow::activate_command(int idx) {
+//     auto matches = commands_.filter(last_input_);
+//     if (!last_input_.empty() && idx >= 0 && idx < (int)matches.size()) {
+//         matches[idx]->action();
+//         show(false);
+//     }
+//     else if (last_input_.empty() && idx >= 0 && idx < (int)history_.size()) {
+//         std::wstring sel = history_.all()[idx];
+//         if (PathIsDirectoryW(sel.c_str())) {
+//             mode_ = Mode::FileBrowser;
+//             browser_.set_cwd(sel);
+//             browser_.update(L"", show_hidden_);
+//             SetWindowTextW(edit_, sel.c_str());
+//             update_list();
+//         }
+//         else {
+//             fileactions::launch(sel);
+//             show(false);
+//         }
+//         history_.add(sel);
+//     }
+//     else {
+//         // just run
+//         if (!last_input_.empty()) {
+//             auto result = (INT_PTR)ShellExecuteW(nullptr, L"open", last_input_.c_str(), nullptr, nullptr, SW_SHOW);
+//             if (result <= 32) {
+//                 MessageBoxW(hwnd_, (L"'" + last_input_ + L"' was not found in system PATH or could not be executed.").c_str(),
+//                     L"Command failed", MB_OK | MB_ICONWARNING);
+//             }
+//         }
+//     }
+// }
 void MainWindow::activate_filebrowser(int idx) {
     const auto& results = browser_.results();
     if (idx >= 0 && idx < (int)results.size()) {
@@ -353,13 +359,32 @@ void MainWindow::activate_history(int idx) {
                 SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
                 update_listview();
 			}
-			else {
+			else if(FsUtils::is_file(curItem.c_str())){
 				fileactions::launch(curItem);
 				show(false);
-			}
-			history_.add(curItem);
-		}
-		});
+            }
+            else {
+				auto result = (INT_PTR)ShellExecuteW(nullptr, L"open", curItem.c_str(), nullptr, nullptr, SW_SHOW);
+                if (result > 32) {
+					show(false);
+					history_.add(curItem);
+                }// else unknown command, don't add to history
+            }
+            return;
+        }
+        // no one matches to last_input_ from history list
+        if (!last_input_.empty()) {
+            auto result = (INT_PTR)ShellExecuteW(nullptr, L"open", last_input_.c_str(), nullptr, nullptr, SW_SHOW);
+            if (result > 32) {
+                show(false);
+                history_.add(last_input_);
+            }
+            //else {
+            //    MessageBoxW(hwnd_, (L"'" + last_input_ + L"' was not found in system PATH or could not be executed.").c_str(),
+            //        L"Command failed", MB_OK | MB_ICONWARNING);
+            //}
+        }
+    });
 }
 void MainWindow::activate_bookmarks(int idx) {
     auto bm = bookmarks_.all();
@@ -370,7 +395,7 @@ void MainWindow::activate_bookmarks(int idx) {
             browser_.set_cwd(sel);
             browser_.update(L"", show_hidden_);
             SetWindowTextW(edit_, sel.c_str());
-            update_list();
+            update_listview();
         }
         else {
             fileactions::launch(sel);
@@ -388,16 +413,12 @@ void MainWindow:: autofill_input_by_selection() {
         if (sel_ >= 0 && sel_ < (int)entries.size()) {
             const auto& e = entries[sel_];
             text = e.fullpath;
+            OutputDebugPrint("autofill: ", text);
             if (e.is_dir || e.is_parent) {
                 if (text.back() != L'\\' && text.back() != L'/')
                     text += L'/'; 
             }
         }
-    }
-    else if (mode_ == Mode::Command) {
-        auto matches = commands_.filter(last_input_);
-        if (sel_ >= 0 && sel_ < (int)matches.size())
-            text = matches[sel_]->keyword;
     }
     else if (mode_ == Mode::Bookmarks) {
         auto bm = bookmarks_.all();
@@ -408,10 +429,14 @@ void MainWindow:: autofill_input_by_selection() {
 		text = history_[sel_];
         if(PathIsDirectoryW(text.c_str())){
             text = text + L"/";
+			SetWindowTextW(edit_, text.c_str());
+			SendMessageW(edit_, EM_SETSEL, text.size(), text.size());
             mode_ = Mode::FileBrowser;
             SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
             browser_.set_cwd(text);
             browser_.update(L"", show_hidden_);
+            update_listview();
+            return;
         }
     }
 
@@ -474,7 +499,7 @@ void MainWindow::file_actions_menu(const std::wstring& path) {
         if (is_bookmarked) bookmarks_.remove(path);
         else bookmarks_.add(path);
         bookmarks_.save();
-        update_list();
+        update_listview();
         break;
     }
     }
@@ -497,6 +522,39 @@ LRESULT MainWindow::processAltBackspace() {
     last_input_ = newText;
     update_listview();
 	return 0;
+}
+
+// Call this inside your subclass proc when you want to handle VK_BACK.
+void CustomBackspaceEdit(HWND hwnd)
+{
+    // 1. Get selection
+    DWORD selStart, selEnd;
+    SendMessageW(hwnd, EM_GETSEL, (WPARAM)&selStart, (LPARAM)&selEnd);
+
+    if (selStart == selEnd)
+    {
+        // No selection: delete the character before the caret
+        if (selStart == 0)
+            return; // At start, nothing to delete
+
+        // Get full text to handle surrogate pairs (optional, for Unicode correctness)
+        int len = GetWindowTextLengthW(hwnd);
+        std::wstring buf(len, 0);
+        GetWindowTextW(hwnd, &buf[0], len + 1);
+
+        // Find the previous codepoint boundary
+        size_t prev = selStart - 1;
+        // Optional: handle UTF-16 surrogate pairs (if needed)
+        if (prev > 0 && IS_HIGH_SURROGATE(buf[prev - 1]) && IS_LOW_SURROGATE(buf[prev]))
+            prev--;
+
+        // Set the selection to the char before the caret
+        SendMessageW(hwnd, EM_SETSEL, prev, selStart);
+    }
+    // else: text is selected, EM_REPLACESEL will just delete it
+
+    // 2. Delete the selected text (or the single character)
+    SendMessageW(hwnd, EM_REPLACESEL, TRUE, (LPARAM)L"");
 }
 
 LRESULT MainWindow::processBackspace()
@@ -527,14 +585,17 @@ LRESULT MainWindow::processBackspace()
 		int len = GetWindowTextLengthW(self->edit_);
         SendMessageW(self->edit_, EM_SETSEL, len, len);
 		self->parse_input(text);
+
 	}
 	else {
-        // the text is the text before executing backspace
-		last_input_ = text.substr(0, text.size() - 1);
-
+        CustomBackspaceEdit(self->edit_);
+		//last_input_ = text.substr(0, text.size() - 1);
+		//SetWindowTextW(self->edit_, last_input_.c_str());
+		//int len = GetWindowTextLengthW(self->edit_);
+        //SendMessageW(self->edit_, EM_SETSEL, len, len);
 		self->update_listview();
 	}
-	return 0;
+    return 0;
 }
 
 void MainWindow::on_history_appended() {
@@ -618,7 +679,7 @@ bool MainWindow::processListViewContent(LPARAM lParam) {
         if ((plvdi->item.mask & LVIF_TEXT) && iItem < (int)browser_.results().size()) {
             // Compose label with folder/file unicode
             const FileEntry& entry = browser_.results()[iItem];
-            // OutputDebugPrint(entry.label);
+            OutputDebugPrint(entry.label);
             wcsncpy_s(plvdi->item.pszText, plvdi->item.cchTextMax, entry.label.c_str(), _TRUNCATE);
         }
     }
@@ -639,8 +700,7 @@ void MainWindow::selectListview(int sel) {
 	SendMessageW(self->hListview_, LVM_ENSUREVISIBLE, (WPARAM)sel, (LPARAM)FALSE);
 }
 void MainWindow::processReturn() {
-	if (mode_ == Mode::Command) activate_command(sel_);
-	else if (mode_ == Mode::FileBrowser) activate_filebrowser(sel_);
+	if (mode_ == Mode::FileBrowser) activate_filebrowser(sel_);
 	else if (mode_ == Mode::History) activate_history(sel_);
 	else if (mode_ == Mode::Bookmarks) activate_bookmarks(sel_);
 }
@@ -679,9 +739,9 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
             self->processListviewNavigation(-1);
             return 0;
         }
-        else if (wParam == VK_BACK ) { 
-            return self->processBackspace();
-        }
+        //else if (wParam == VK_BACK ) { 
+        //    return self->processBackspace();
+        //}
         else if (wParam == VK_OEM_2 && (GetKeyState(VK_CONTROL) & 0x8000)) {  // ctrl /
             return self->undo_delete_word();
         }
@@ -708,7 +768,7 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
                 if (std::find(bm.all().begin(), bm.all().end(), path) == bm.all().end()) bm.add(path);
                 else bm.remove(path);
                 bm.save();
-                self->update_list();
+                self->update_listview();
             }
             return 0;
         }
@@ -740,6 +800,9 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
         }
         break;
 	case WM_CHAR: {
+        if (wParam == VK_BACK) { // '\b' == 8
+			return self->processBackspace();
+        }
 		LRESULT res = DefSubclassProc(hEdit, msg, wParam, lParam);
 		// Allow only printable (`wParam >= 32`) to reach your parse logic
 		// You may also allow Enter (13), Tab (9), etc., as needed
@@ -770,8 +833,7 @@ LRESULT MainWindow::processWMCommand(WPARAM wParam) {
         // list
         if (HIWORD(wParam) == LBN_DBLCLK) {
             // double click in listbox is same as Enter
-            if (mode_ == Mode::Command) activate_command(sel_);
-            else if (mode_ == Mode::FileBrowser) activate_filebrowser(sel_);
+            if (mode_ == Mode::FileBrowser) activate_filebrowser(sel_);
             else if (mode_ == Mode::History) activate_history(sel_);
             else if (mode_ == Mode::Bookmarks) activate_bookmarks(sel_);
             SetWindowTextW(edit_, L"");
@@ -812,10 +874,10 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         return 0;
     case WM_COMMAND:
         return self->processWMCommand(wParam);
-    case WM_ACTIVATE:
-        if (wParam == WA_INACTIVE)
-            self->show(false);
-        break;
+    //case WM_ACTIVATE:
+    //    if (wParam == WA_INACTIVE)
+    //        self->show(false);
+    //    break;
     case WM_DESTROY:
         self->save_all();
         PostQuitMessage(0); break;
@@ -853,7 +915,7 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     }
     case WM_DEBOUNCED_UPDATE_LIST:
         self->queued_update_ = false;
-        self->update_list();
+        //self->update_list();
         // When done loading, stop showing spinner:
         if (self->history_.loaded_done()) { // you need to implement loaded_done()
             self->show_spinner_ = false;
@@ -881,8 +943,8 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     case WM_TIMER:
         if (wParam == SPINNER_TIMER_ID) {
             self->update_spinner();
+			return 0;
         }
-        return 0;
     default:
         return DefWindowProcW(hwnd, msg, wParam, lParam);
     }

@@ -10,7 +10,11 @@ exclude list
 ** DONE ctrl / undo delete word
 * Listview
 ** TODO goto first/last
-** TODO filebrowser switch to history, listview doesn't get updated
+** DONE filebrowser switch to history, listview doesn't get updated
+** TODO dbclick
+** TODO file explorer
+* TODO command/history save to sqlite?
+
 
 
 
