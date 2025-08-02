@@ -5,9 +5,13 @@
 #include <mutex>
 #include <functional>
 #include <atomic>
+#include <condition_variable>
 
 class HistoryManager {
 public:
+    using FilterCallback = std::function<void()>;
+    HistoryManager();
+    void request_filter(const std::wstring& pat, FilterCallback filterDone);
     void add(const std::wstring& path);
     const std::deque<std::wstring>& all() const;
     void allWith(std::function<void(const std::deque<std::wstring> &)>) const;
@@ -32,10 +36,24 @@ public:
 		std::lock_guard<std::mutex> lock(filtered_items_mtx);
 		fn(filtered_items_);
 	}
+
+    ~HistoryManager(){
+        stop_ = true;
+
+        if(filter_worker_.joinable()) filter_worker_.join();
+    }
 private:
+    std::thread filter_worker_;
+    // are always accessed/modified under the filter_mutex_ lock. no need atomic
+    bool stop_ = false;
+    bool newRequest_ = false;
+    std::condition_variable cv_;
+    FilterCallback pending_cb_;
+    std::wstring pending_pat_;
 	std::deque<std::wstring> items_;
 	std::deque<std::wstring> filtered_items_;  // the master list (never filtered)
 	static constexpr size_t max_items_ = 40;
+    std::mutex filter_mutex_;
 	mutable std::mutex items_mtx;
 	mutable std::mutex filtered_items_mtx;
 	std::mutex loaded_mtx;
