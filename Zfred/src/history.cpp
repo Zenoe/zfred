@@ -10,72 +10,8 @@
 
 HistoryManager::HistoryManager(){
 	filter_worker_ = std::thread([this] {
-		std::unique_lock<std::mutex> lock(filter_mutex_);
 		while (!stop_) {
-			cv_.wait(lock, [this] { return stop_ || newRequest_; });
-
-			if (stop_) break;
-
-			// Copy pending job to local vars for thread safety
-			auto pattern = pending_pat_;
-			auto callback = pending_cb_;
-			newRequest_ = false; // Mark current job as taken
-
-			lock.unlock();
-
-			// Do filtering
-			if (pattern.empty()) {
-				std::lock_guard<std::mutex> lck(filtered_items_mtx);
-				this->filtered_items_ = this->items_; // Restore all
-			}
-			else {
-				{
-					std::lock_guard<std::mutex> lock(filtered_items_mtx);
-					this->filtered_items_.clear();
-				}
-				// 先拷贝一份items_，减少加锁时间和粒度
-				std::deque<std::wstring> items_copy;
-				{
-					std::lock_guard<std::mutex> items_lock(items_mtx);
-					items_copy = this->items_;
-				}
-
-				// 局部变量做筛选，避免反复加锁
-				std::deque<std::wstring> result;
-				for (const auto& item : items_copy) {
-					std::vector<std::wstring_view> pattern_views;
-					// todo split_by_space 参数是引用, pat 可能在split_by_space中途执行过程中被外面修改
-					std::vector<std::wstring> pats = string_util::split_by_space(pat);
-					pattern_views.reserve(pats.size());
-					for (const auto& s : pats)
-						pattern_views.push_back(s);
-
-					std::wstring_view item_view(item);
-					if (ah_substring_match(pattern_views, item_view)) {
-						result.push_back(item);
-					}
-				}
-				// 一次性写回filtered_items_
-				{
-					std::lock_guard<std::mutex> filtered_lock(filtered_items_mtx);
-					this->filtered_items_ = std::move(result);
-				}
-			}
-
-			// Optional: check for new request _here_ to abort result delivery
-			lock.lock();
-			if (!stop_ && !newRequest_ && callback) {
-				lock.unlock();
-				callback(); // safe to signal GUI
-			}
-			else {
-				lock.unlock();
-			}
-		}
-		});
-	filter_worker_ = std::thread([this] {
-		std::unique_lock<std::mutex> lock(filter_mutex_);
-		while (!stop_) {
+			std::unique_lock<std::mutex> lock(filtered_items_mtx);
 			cv_.wait(lock, [this] { return stop_ || newRequest_; });
 			if (stop_) { break; }
 			auto pat = pending_pat_;
@@ -87,7 +23,6 @@ HistoryManager::HistoryManager(){
 				std::lock_guard<std::mutex> lock(filtered_items_mtx);
 				//std::lock_guard<std::mutex> lock2(items_mtx);
 				this->filtered_items_ = this->items_; // Restore all
-				// std::this_thread::sleep_for(std::chrono::milliseconds(2000)); // Let server start
 			}
 			else {
 				{
@@ -103,19 +38,43 @@ HistoryManager::HistoryManager(){
 
 				// 局部变量做筛选，避免反复加锁
 				std::deque<std::wstring> result;
-				for (const auto& item : items_copy) {
-					std::vector<std::wstring_view> pattern_views;
-					// todo split_by_space 参数是引用, pat 可能在split_by_space中途执行过程中被外面修改
-					std::vector<std::wstring> pats = string_util::split_by_space(pat);
-					pattern_views.reserve(pats.size());
-					for (const auto& s : pats)
-						pattern_views.push_back(s);
+				auto t0 = std::chrono::steady_clock::now();
+				// Build Aho-Corasick only ONCE
+				std::vector<std::wstring_view> pattern_views;
+				std::vector<std::wstring> pats = string_util::split_by_space(pat);
+				pattern_views.reserve(pats.size());
+				for (const auto& s : pats)
+					pattern_views.push_back(s);
 
+				AhoCorasick<wchar_t> ac;
+				ac.build(pattern_views);
+
+				for (const auto& item : items_copy) {
 					std::wstring_view item_view(item);
-					if (ah_substring_match(pattern_views, item_view)) {
+
+					// Inline the check instead of building every time
+					std::vector<bool> found(pattern_views.size(), false);
+					ac.search(item_view, found);
+					if (std::all_of(found.begin(), found.end(), [](bool b) {return b; })) {
 						result.push_back(item);
 					}
 				}
+				//for (const auto& item : items_copy) {
+				//	std::vector<std::wstring_view> pattern_views;
+				//	// todo split_by_space 参数是引用, pat 可能在split_by_space中途执行过程中被外面修改
+				//	std::vector<std::wstring> pats = string_util::split_by_space(pat);
+				//	pattern_views.reserve(pats.size());
+				//	for (const auto& s : pats)
+				//		pattern_views.push_back(s);
+
+				//	std::wstring_view item_view(item);
+				//	if (ah_substring_match(pattern_views, item_view)) {
+				//		result.push_back(item);
+				//	}
+				//}
+				auto t1 = std::chrono::steady_clock::now();
+
+				OutputDebugPrint("time const: ", std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
 				// 一次性写回filtered_items_
 				{
 					std::lock_guard<std::mutex> filtered_lock(filtered_items_mtx);

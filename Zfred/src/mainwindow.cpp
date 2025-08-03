@@ -172,7 +172,8 @@ void MainWindow::update_listview() {
     ListView_SetItemState(hListview_, -1, 0, LVIS_SELECTED | LVIS_FOCUSED);
     if (mode_ == Mode::History) {
 		// history_.filterModifyItem(last_input_);
-		history_.filterModifyItemThread(last_input_, [this](){
+		history_.request_filter(last_input_, [this](){
+		//history_.filterModifyItemThread(last_input_, [this](){
 			if (mode_ != Mode::History) {
                 // don't run when it's not history mode
 				return;
@@ -593,24 +594,15 @@ LRESULT MainWindow::processBackspace()
 		//SetWindowTextW(self->edit_, last_input_.c_str());
 		//int len = GetWindowTextLengthW(self->edit_);
         //SendMessageW(self->edit_, EM_SETSEL, len, len);
+        //last_input = 
+
+        int len = GetWindowTextLengthW(self->edit_);
+        std::wstring buf(len, 0);
+        GetWindowTextW(self->edit_, &buf[0], len + 1);
+        last_input_ = std::move(buf);
 		self->update_listview();
 	}
     return 0;
-}
-
-void MainWindow::on_history_appended() {
-    show_spinner_ = true;
-    spinner_start_time_ = std::chrono::steady_clock::now();
-    // Start spinner timer if not already started
-    SetTimer(hwnd_, SPINNER_TIMER_ID, 100, NULL);
-    //return;
-    // Debounce the update_list
-    if (!queued_update_.exchange(true)) {
-        std::thread([hwnd = hwnd_]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(120));
-            //PostMessageW(hwnd, WM_DEBOUNCED_UPDATE_LIST, 0, 0);
-            }).detach();
-    }
 }
 
 void MainWindow::update_spinner() {
@@ -910,7 +902,6 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         //}
         //delete batch;
         return self->processAppendHistory();
-        //self->on_history_appended();
         return 0;
     }
     case WM_DEBOUNCED_UPDATE_LIST:

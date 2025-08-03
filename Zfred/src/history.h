@@ -37,10 +37,13 @@ public:
 		fn(filtered_items_);
 	}
 
-    ~HistoryManager(){
-        stop_ = true;
-
-        if(filter_worker_.joinable()) filter_worker_.join();
+    ~HistoryManager() {
+        {
+            std::lock_guard<std::mutex> lock(filter_mutex_);
+            stop_ = true;
+        }
+        cv_.notify_one();
+        if (filter_worker_.joinable()) filter_worker_.join();
     }
 private:
     std::thread filter_worker_;

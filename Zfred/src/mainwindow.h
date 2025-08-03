@@ -71,7 +71,6 @@ private:
 
     //bool processListViewContent(LPARAM lParam, const std::vector<std::wstring>& items);
     bool processListViewContent(LPARAM lParam);
-    void on_history_appended();
     void update_spinner();
 
 

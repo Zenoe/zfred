@@ -94,7 +94,7 @@ private:
     }
 };
 
-// Main search function
+// for example
 template<typename CharT>
 bool ah_substring_match(const std::vector<std::basic_string_view<CharT>>& patterns,
     std::basic_string_view<CharT> str)
