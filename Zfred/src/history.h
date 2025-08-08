@@ -7,6 +7,7 @@
 #include <atomic>
 #include <condition_variable>
 
+#include "debugtool.h"
 class HistoryManager {
 public:
     using FilterCallback = std::function<void()>;
@@ -14,6 +15,7 @@ public:
     void request_filter(const std::wstring& pat, FilterCallback filterDone);
     void add(const std::wstring& path);
     const std::deque<std::wstring>& all() const;
+    //std::shared_ptr<const std::deque<std::wstring>> all() const;
     void allWith(std::function<void(const std::deque<std::wstring> &)>) const;
     void save();
     void loadSync();
@@ -30,7 +32,6 @@ public:
     std::wstring operator [] (size_t idx) const;
     size_t size() const;
 
-
 	template<typename Func>
 	void withItems(Func&& fn) const {
 		std::lock_guard<std::mutex> lock(filtered_items_mtx);
@@ -39,11 +40,14 @@ public:
 
     ~HistoryManager() {
         {
-            std::lock_guard<std::mutex> lock(filter_mutex_);
+            std::lock_guard<std::mutex> lock(filtered_items_mtx);
             stop_ = true;
         }
         cv_.notify_one();
-        if (filter_worker_.joinable()) filter_worker_.join();
+        if (filter_worker_.joinable()) {
+            filter_worker_.join();
+            OutputDebugPrint("---------join filter thread worker");
+        }
     }
 private:
     std::thread filter_worker_;
@@ -53,8 +57,10 @@ private:
     std::condition_variable cv_;
     FilterCallback pending_cb_;
     std::wstring pending_pat_;
-	std::deque<std::wstring> items_;
-	std::deque<std::wstring> filtered_items_;  // the master list (never filtered)
+	//std::deque<std::wstring> items_;
+	//std::deque<std::wstring> filtered_items_; 
+    std::shared_ptr<std::deque<std::wstring>> items_ = std::make_shared<std::deque<std::wstring>>();
+    std::shared_ptr<std::deque<std::wstring>> filtered_items_ = std::make_shared<std::deque<std::wstring>>();
 	static constexpr size_t max_items_ = 40;
     std::mutex filter_mutex_;
 	mutable std::mutex items_mtx;

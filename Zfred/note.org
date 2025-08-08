@@ -22,6 +22,8 @@ exclude list
 
 
 * key
+Ctrl+1: switch to history
+Ctrl+2: switch to bookmark
 Ctrl+H: Toggle hidden files
 Ctrl+B: Bookmark/unbookmark selected file or dir
 F2 or Menu Key: File actions menu (open, open folder, delete, rename, copy, (un)bookmark)

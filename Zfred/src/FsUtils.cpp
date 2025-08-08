@@ -18,6 +18,8 @@ bool FsUtils::is_system(const fs::directory_entry& entry) {
 }
 
 bool FsUtils::is_dir(const std::wstring& p) {
+    if (p.empty()) return false;
+    if(p[p.size()-1] == L'/') return true;
     try { return fs::is_directory(p); }
     catch (...) { return false; }
 }

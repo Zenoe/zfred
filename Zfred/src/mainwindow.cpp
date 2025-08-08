@@ -12,12 +12,13 @@
 
 #include "FsUtils.h"
 
-#ifdef _DEBUG
+//#ifdef _DEBUG
 #include "debugtool.h"
-#endif
+//#endif
 
 #include "constant.h"
 #include "utils/stringutil.h"
+#include "FsUtils.h"
 
 //#include "guihelper.h"
 MainWindow* MainWindow::self = nullptr;
@@ -113,7 +114,7 @@ void MainWindow::show(bool visible) {
 		SetForegroundWindow(hwnd_);
 		SetActiveWindow(hwnd_);
 		if (last_input_.empty()) {
-			mode_ = Mode::History;  // default/initial mode 
+			//mode_ = Mode::History;  // default/initial mode 
 			SetWindowTextW(edit_, L"");
 			update_listview();
 		}
@@ -185,13 +186,15 @@ void MainWindow::update_listview() {
 			});
 	}
 	else if (mode_ == Mode::FileBrowser) {
-		// OutputDebugPrint("browser_.results().size(): ", browser_.results().size());
 		ListView_SetItemCountEx(this->hListview_, browser_.results().size(), LVSICF_NOINVALIDATEALL);
 		// Force update visible rows
 		InvalidateRect(this->hListview_, NULL, TRUE);
 		UpdateWindow(this->hListview_);
 	}else if(mode_ == Mode::Bookmarks){
-
+		ListView_SetItemCountEx(this->hListview_, bookmarks_.all().size(), LVSICF_NOINVALIDATEALL);
+		// Force update visible rows
+		InvalidateRect(this->hListview_, NULL, TRUE);
+		UpdateWindow(this->hListview_);
     }
 	sel_ = -1;
 	//if (sel_ >= 0){
@@ -348,8 +351,8 @@ void MainWindow::activate_filebrowser(int idx) {
 }
 void MainWindow::activate_history(int idx) {
 	history_.withItems([&](const auto& hist) {
-		if (idx >= 0 && idx < (int)hist.size()) {
-			std::wstring curItem = hist[idx];
+		if (idx >= 0 && idx < (int)hist->size()) {
+			std::wstring curItem = (*hist)[idx];
 			if (PathIsDirectoryW(curItem.c_str())) {
 				mode_ = Mode::FileBrowser;
 				browser_.set_cwd(curItem);
@@ -409,6 +412,16 @@ void MainWindow::activate_bookmarks(int idx) {
 void MainWindow:: autofill_input_by_selection() {
     if (sel_ < 0) return;  // no item in the listview
     std::wstring text;
+    auto autoFillDir = [this](std::wstring& text) {
+            text = text + L"/";
+            SetWindowTextW(edit_, text.c_str());
+            SendMessageW(edit_, EM_SETSEL, text.size(), text.size());
+            mode_ = Mode::FileBrowser;
+            SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
+            browser_.set_cwd(text);
+            browser_.update(L"", show_hidden_);
+            update_listview();
+    };
     if (mode_ == Mode::FileBrowser) {
         const auto& entries = browser_.results();
         if (sel_ >= 0 && sel_ < (int)entries.size()) {
@@ -423,23 +436,21 @@ void MainWindow:: autofill_input_by_selection() {
     }
     else if (mode_ == Mode::Bookmarks) {
         auto bm = bookmarks_.all();
-        if (sel_ >= 0 && sel_ < (int)bm.size())
+        if (sel_ >= 0 && sel_ < (int)bm.size()) {
             text = bm[sel_];
-    }
-    else if (mode_ == Mode::History) {
-		text = history_[sel_];
-        if(PathIsDirectoryW(text.c_str())){
-            text = text + L"/";
-			SetWindowTextW(edit_, text.c_str());
-			SendMessageW(edit_, EM_SETSEL, text.size(), text.size());
-            mode_ = Mode::FileBrowser;
-            SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
-            browser_.set_cwd(text);
-            browser_.update(L"", show_hidden_);
-            update_listview();
-            return;
+			if (PathIsDirectoryW(text.c_str())) {
+				return autoFillDir(text);
+			}
         }
     }
+    else if (mode_ == Mode::History) {
+        if (sel_ >= 0) {
+			text = history_[sel_];
+			if (PathIsDirectoryW(text.c_str())) {
+				return autoFillDir(text);
+			}
+		}
+	}
 
     if (!text.empty()) {
         SetWindowTextW(edit_, text.c_str());
@@ -472,7 +483,12 @@ void MainWindow::file_actions_menu(const std::wstring& path) {
     AppendMenuW(hMenu, MF_STRING, 6, L"Rename...");
     bool is_bookmarked = std::find(bookmarks_.all().begin(), bookmarks_.all().end(), path) != bookmarks_.all().end();
     AppendMenuW(hMenu, MF_STRING, 7, is_bookmarked ? L"Remove Bookmark" : L"Add Bookmark");
-    POINT pt; GetCursorPos(&pt);
+    //POINT pt; GetCursorPos(&pt);
+    RECT rc; // bounding rectangle for the item
+    if (!ListView_GetItemRect(hListview_, sel_, &rc, LVIR_BOUNDS)) return;
+
+    POINT pt = { rc.left + 4, rc.bottom - 4 }; 
+    ClientToScreen(hListview_, &pt);
     int res = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd_, NULL);
     switch (res) {
     case 1: fileactions::launch(path); break;
@@ -633,49 +649,62 @@ LRESULT MainWindow::processAppendHistory() {
     return 0;
 }
 
-bool MainWindow::processListViewContent(LPARAM lParam) {
+void MainWindow::processListViewContent(LPARAM lParam) {
+    auto set_item_label = [](NMLVDISPINFOW* plvdi, const std::wstring& text) {
+		std::wstring label = (FsUtils::is_dir(text.c_str()) ? L"🗂 " : L"🗎 ") + text;
+        wcsncpy_s(plvdi->item.pszText, plvdi->item.cchTextMax, label.c_str(), _TRUNCATE);
+    };
+
+    NMLVDISPINFOW* plvdi = reinterpret_cast<NMLVDISPINFOW*>(lParam);
+    int iItem = plvdi->item.iItem;
+
+    if (!(plvdi->item.mask & LVIF_TEXT)) return;
+
     if (mode_ == Mode::History) {
         history_.allWith([&](const auto& items) {
-            NMLVDISPINFOW* plvdi = (NMLVDISPINFOW*)lParam;
-            int iItem = plvdi->item.iItem;
-            if ((plvdi->item.mask & LVIF_TEXT) && iItem < (int)items.size()) {
-                const std::wstring& path = items[iItem];
-                std::wstring label = (PathIsDirectoryW(path.c_str()) ? L"🗂 " : L"🗎 ") + path;
-                wcsncpy_s(plvdi->item.pszText, plvdi->item.cchTextMax, label.c_str(), _TRUNCATE);
-            }
-            });
+			if (iItem < static_cast<int>(items.size())) {
+				const std::wstring& path = items[iItem];
+				set_item_label(plvdi, path);
+			}
+			});
 
-    //auto loadItem = [&](const auto& items) {
-    //    NMLVDISPINFOW* plvdi = (NMLVDISPINFOW*)lParam;
-    //    int iItem = plvdi->item.iItem;
-    //    if ((plvdi->item.mask & LVIF_TEXT) && iItem < (int)items.size()) {
-    //        const std::wstring& path = items[iItem];
-    //        std::wstring label = (PathIsDirectoryW(path.c_str()) ? L"🗂 " : L"🗎 ") + path;
-    //        wcsncpy_s(plvdi->item.pszText, plvdi->item.cchTextMax, label.c_str(), _TRUNCATE);
-    //    }
-    //};
-        //loadItem(history_.all());
+		//auto loadItem = [&](const auto& items) {
+		//    NMLVDISPINFOW* plvdi = (NMLVDISPINFOW*)lParam;
+		//    int iItem = plvdi->item.iItem;
+		//    if ((plvdi->item.mask & LVIF_TEXT) && iItem < (int)items.size()) {
+		//        const std::wstring& path = items[iItem];
+		//        std::wstring label = (PathIsDirectoryW(path.c_str()) ? L"🗂 " : L"🗎 ") + path;
+		//        wcsncpy_s(plvdi->item.pszText, plvdi->item.cchTextMax, label.c_str(), _TRUNCATE);
+		//    }
+		//};
+			//loadItem(history_.all());
 
-  //      //std::deque<std::wstring> items = history_.all(); // copy huge data, cause listview populating slow
-		//NMLVDISPINFOW* plvdi = (NMLVDISPINFOW*)lParam;
-		//int iItem = plvdi->item.iItem;
-		//if ((plvdi->item.mask & LVIF_TEXT) && iItem < (int)history_.all().size()) {
-  //          OutputDebugPrint("history size: ", history_.all().size());
-		//	const std::wstring& path = history_.all()[iItem];
-  //          std::wstring label = (PathIsDirectoryW(path.c_str()) ? L"🗂 " : L"🗎 ") + path;
-		//	wcsncpy_s(plvdi->item.pszText, plvdi->item.cchTextMax, label.c_str(), _TRUNCATE);
-		//}
-	}else if(mode_ == Mode::FileBrowser){
-        NMLVDISPINFOW* plvdi = (NMLVDISPINFOW*)lParam;
-        int iItem = plvdi->item.iItem;
-        if ((plvdi->item.mask & LVIF_TEXT) && iItem < (int)browser_.results().size()) {
-            // Compose label with folder/file unicode
-            const FileEntry& entry = browser_.results()[iItem];
-            OutputDebugPrint(entry.label);
-            wcsncpy_s(plvdi->item.pszText, plvdi->item.cchTextMax, entry.label.c_str(), _TRUNCATE);
+	  //      //std::deque<std::wstring> items = history_.all(); // copy huge data, cause listview populating slow
+			//NMLVDISPINFOW* plvdi = (NMLVDISPINFOW*)lParam;
+			//int iItem = plvdi->item.iItem;
+			//if ((plvdi->item.mask & LVIF_TEXT) && iItem < (int)history_.all().size()) {
+	  //          OutputDebugPrint("history size: ", history_.all().size());
+			//	const std::wstring& path = history_.all()[iItem];
+	  //          std::wstring label = (PathIsDirectoryW(path.c_str()) ? L"🗂 " : L"🗎 ") + path;
+			//	wcsncpy_s(plvdi->item.pszText, plvdi->item.cchTextMax, label.c_str(), _TRUNCATE);
+			//}
+	}
+	else if (mode_ == Mode::FileBrowser) {
+		NMLVDISPINFOW* plvdi = (NMLVDISPINFOW*)lParam;
+		int iItem = plvdi->item.iItem;
+        const auto& results = browser_.results();
+        if (iItem < static_cast<int>(results.size())) {
+            const FileEntry& entry = results[iItem];
+            set_item_label(plvdi, entry.label);
         }
     }
-	return TRUE;
+    else if (mode_ == Mode::Bookmarks) {
+        const auto& bookmarks = bookmarks_.all();
+        if (iItem < static_cast<int>(bookmarks.size())) {
+            const std::wstring& entry = bookmarks[iItem];
+            set_item_label(plvdi, entry);
+        }
+    }
 }
 
 void MainWindow::selectListview(int sel) {
@@ -691,11 +720,41 @@ void MainWindow::selectListview(int sel) {
 	// Ensure visible
 	SendMessageW(self->hListview_, LVM_ENSUREVISIBLE, (WPARAM)sel, (LPARAM)FALSE);
 }
+LRESULT MainWindow::processContextMenu() {
+    if (sel_ < 0) return 0;
+	std::wstring path;
+	if (mode_ == Mode::FileBrowser) {
+		auto e = self->browser_.selected();
+		if (e) path = e->fullpath;
+	}
+	else if (self->mode_ == Mode::History && self->sel_ < (int)self->history_.size()) {
+		path = self->history_.all()[self->sel_];
+	}
+	else if (self->mode_ == Mode::Bookmarks && self->sel_ < (int)self->bookmarks_.all().size()) {
+		path = self->bookmarks_.all()[self->sel_];
+	}
+	if (!path.empty()) self->file_actions_menu(path);
+	return 0;
+}
 void MainWindow::processReturn() {
 	if (mode_ == Mode::FileBrowser) activate_filebrowser(sel_);
 	else if (mode_ == Mode::History) activate_history(sel_);
 	else if (mode_ == Mode::Bookmarks) activate_bookmarks(sel_);
 }
+
+LRESULT MainWindow::switchMode(WPARAM wParam) {
+    if (wParam == 0x31)
+        mode_ = Mode::History;
+    else if (wParam == 0x32)
+        mode_ = Mode::Bookmarks;
+    else
+        return 0;
+	SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
+	update_listview();
+	SetFocus(edit_);
+    return 0;
+}
+
 LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR) {
 	if (!self) return DefSubclassProc(hEdit, msg, wParam, lParam);
 	switch (msg) {
@@ -712,11 +771,11 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
 			return 0;
 		}
 		else if (wParam == VK_DOWN || (wParam == L'N' && (GetKeyState(VK_CONTROL) & 0x8000))) {
-            //int n = (int)SendMessageW(self->listbox_, LB_GETCOUNT, 0, 0);
-            //if (n == 0) return 0;
-            //self->sel_ = (self->sel_ + 1) % n;
-            //SendMessageW(self->listbox_, LB_SETCURSEL, self->sel_, 0);
-            //return 0;
+			//int n = (int)SendMessageW(self->listbox_, LB_GETCOUNT, 0, 0);
+			//if (n == 0) return 0;
+			//self->sel_ = (self->sel_ + 1) % n;
+			//SendMessageW(self->listbox_, LB_SETCURSEL, self->sel_, 0);
+			//return 0;
 
             self->processListviewNavigation(+1);
             return 0;
@@ -737,6 +796,10 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
         else if (wParam == VK_OEM_2 && (GetKeyState(VK_CONTROL) & 0x8000)) {  // ctrl /
             return self->undo_delete_word();
         }
+        else if ((wParam == 0x31 || wParam == 0x32 ) && (GetKeyState(VK_CONTROL) & 0x8000)) {
+            return self->switchMode(wParam);
+        }
+        
         else if ((wParam == L'H' || wParam == L'h') && (GetKeyState(VK_CONTROL) & 0x8000)) {
             self->show_hidden_ = !self->show_hidden_;
             self->parse_input(self->last_input_);
@@ -765,20 +828,7 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
             return 0;
         }
         else if (wParam == VK_F2 || wParam == VK_APPS) {
-            // F2 or "menu" key: file actions menu
-            std::wstring path;
-            if (self->mode_ == Mode::FileBrowser) {
-                auto e = self->browser_.selected();
-                if (e) path = e->fullpath;
-            }
-            else if (self->mode_ == Mode::History && self->sel_ < (int)self->history_.size()) {
-                path = self->history_.all()[self->sel_];
-            }
-            else if (self->mode_ == Mode::Bookmarks && self->sel_ < (int)self->bookmarks_.all().size()) {
-                path = self->bookmarks_.all()[self->sel_];
-            }
-            if (!path.empty()) self->file_actions_menu(path);
-            return 0;
+            return self->processContextMenu();
         }
         else if (wParam == VK_ESCAPE) {
             self->show(false);
@@ -906,9 +956,8 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     }
     case WM_DEBOUNCED_UPDATE_LIST:
         self->queued_update_ = false;
-        //self->update_list();
         // When done loading, stop showing spinner:
-        if (self->history_.loaded_done()) { // you need to implement loaded_done()
+        if (self->history_.loaded_done()) { 
             self->show_spinner_ = false;
             KillTimer(hwnd, SPINNER_TIMER_ID);
             self->update_spinner();
@@ -934,8 +983,8 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     case WM_TIMER:
         if (wParam == SPINNER_TIMER_ID) {
             self->update_spinner();
-			return 0;
         }
+		return 0;
     default:
         return DefWindowProcW(hwnd, msg, wParam, lParam);
     }
@@ -968,6 +1017,11 @@ LRESULT CALLBACK MainWindow::ListviewProc(HWND hListview, UINT msg, WPARAM wPara
         else if (wParam == VK_BACK ) {
             return self->processBackspace();
         }
+        else if (wParam == VK_ESCAPE) {
+            self->show(false);
+            return 0;
+        }
+
     }
     return DefSubclassProc(hListview, msg, wParam, lParam);
 }

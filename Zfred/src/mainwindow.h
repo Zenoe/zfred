@@ -69,11 +69,13 @@ private:
     LRESULT processBackspace();
     LRESULT processAppendHistory();
 
+    LRESULT processContextMenu();
     //bool processListViewContent(LPARAM lParam, const std::vector<std::wstring>& items);
-    bool processListViewContent(LPARAM lParam);
+    void processListViewContent(LPARAM lParam);
     void update_spinner();
 
 
+    LRESULT switchMode(WPARAM wParam);
     void processListviewNavigation(int direction);
     LRESULT processWMCommand(WPARAM wpParam);
     void processReturn();

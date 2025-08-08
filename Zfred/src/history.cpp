@@ -1,16 +1,16 @@
-// history.cpp
 #include "history.h"
 #include <fstream>
 #include "utils/sysutil.h"
 #include <thread>
 #include <unordered_set>
 #include "utils/stringutil.h"
-#include "debugtool.h"
 #include "utils/ahocorasick.h"
 
 HistoryManager::HistoryManager(){
 	filter_worker_ = std::thread([this] {
 		while (!stop_) {
+
+		OutputDebugPrint("lock filter item mtx ctor1");
 			std::unique_lock<std::mutex> lock(filtered_items_mtx);
 			cv_.wait(lock, [this] { return stop_ || newRequest_; });
 			if (stop_) { break; }
@@ -20,20 +20,29 @@ HistoryManager::HistoryManager(){
 			lock.unlock();
 
 			if (pat.empty()) {
+
+				std::lock_guard<std::mutex> lock1(items_mtx);
+		OutputDebugPrint("lock filter item mtx ctor2");
 				std::lock_guard<std::mutex> lock(filtered_items_mtx);
-				//std::lock_guard<std::mutex> lock2(items_mtx);
-				this->filtered_items_ = this->items_; // Restore all
+				//this->filtered_items_ = this->items_;// shallow copy
+				if (!items_) {
+					OutputDebugPrint("items_ is nullptr (thread)!");
+					MessageBox(nullptr, L"items_ is null", L"caption", 0);
+					continue;
+				}
+				filtered_items_ = std::make_shared<std::deque<std::wstring>>(*items_);
 			}
 			else {
-				{
-					std::lock_guard<std::mutex> lock(filtered_items_mtx);
-					this->filtered_items_.clear();
-				}
 				// 先拷贝一份items_，减少加锁时间和粒度
 				std::deque<std::wstring> items_copy;
 				{
 					std::lock_guard<std::mutex> items_lock(items_mtx);
-					items_copy = this->items_;
+					items_copy = *items_;
+				}
+				{
+		OutputDebugPrint("lock filter item mtx ctor3");
+					std::lock_guard<std::mutex> lock(filtered_items_mtx);
+					filtered_items_->clear();
 				}
 
 				// 局部变量做筛选，避免反复加锁
@@ -77,8 +86,10 @@ HistoryManager::HistoryManager(){
 				OutputDebugPrint("time const: ", std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
 				// 一次性写回filtered_items_
 				{
+
+					OutputDebugPrint("lock filter item mtx ctor4");
 					std::lock_guard<std::mutex> filtered_lock(filtered_items_mtx);
-					this->filtered_items_ = std::move(result);
+					this->filtered_items_ = std::make_shared<std::deque<std::wstring>>(std::move(result));
 				}
 			}
 
@@ -111,50 +122,68 @@ void HistoryManager::add(const std::wstring& path) {
 	//    }
 	//}
 
-	if (!items_.empty() && items_.front() == path) return;
-	items_.erase(std::remove(items_.begin(), items_.end(), path), items_.end());
+	if (!items_->empty() && items_->front() == path) return;
+	items_->erase(std::remove(items_->begin(), items_->end(), path), items_->end());
 
-	items_.push_front(path);
-	if (items_.size() > max_items_) items_.pop_back();
+	items_->push_front(path);
+	if (items_->size() > max_items_) items_->pop_back();
 }
 const std::deque<std::wstring>& HistoryManager::all() const {
+
+		OutputDebugPrint("lock filter item mtx all");
 	std::lock_guard<std::mutex> lock(filtered_items_mtx);
-	return filtered_items_;
+	return *filtered_items_;
 }
 
+//std::shared_ptr<const std::deque<std::wstring>> HistoryManager::all() const {
+//	std::lock_guard<std::mutex> lock(filtered_items_mtx);
+//	return filtered_items_;
+//}
 
 void HistoryManager::allWith(std::function<void(const std::deque<std::wstring>&)> cb) const {
-	std::lock_guard<std::mutex> lock(filtered_items_mtx);
-	cb(filtered_items_);
+	// might use shared_mutex (read-lock) ?
+	//std::lock_guard<std::mutex> lock(filtered_items_mtx);
+	//cb(filtered_items_);
+	std::shared_ptr<const std::deque<std::wstring>> snapshot;
+	{
+		OutputDebugPrint("lock filter item mtx allwith");
+		std::lock_guard<std::mutex> lock(filtered_items_mtx);
+		OutputDebugPrint("after lock in allwith");
+		if(!filtered_items_)
+			MessageBox(nullptr, L"filter items_ is null", L"caption", 0);
+
+		snapshot = filtered_items_; // Refcount increment
+	}
+	cb(*snapshot);
 	//return filtered_items_;
 }
 
 void HistoryManager::save() {
 	std::wofstream out(L"alfred_history.txt");
-	for (const auto& s : items_) out << s << L"\n";
+	for (const auto& s : *items_) out << s << L"\n";
 }
 void HistoryManager::loadSync() {
-	items_.clear();
-	std::wifstream in(L"alfred_history.txt");
+	items_->clear();
+	std::wifstream in(L"alfred_history->txt");
 	std::wstring s;
-	while (std::getline(in, s)) if (!s.empty()) items_.push_back(s);
+	while (std::getline(in, s)) if (!s.empty()) items_->push_back(s);
 
 	const std::vector<std::wstring> recentVec = sys_util::loadSystemRecent();
-	items_.insert(items_.end(), recentVec.begin(), recentVec.end());
+	items_->insert(items_->end(), recentVec.begin(), recentVec.end());
 }
 
 void HistoryManager::load_async_batch(std::function<void(std::vector<std::wstring>&)> on_batch) {
 	std::thread([this, on_batch] {
 		{
 			std::lock_guard<std::mutex> lock(this->items_mtx);
-			items_.clear();
+			items_->clear();
 		}
 		std::vector<std::wstring> batch;
 		auto flush = [&] {
 			if (!batch.empty()) {
 				{
 					std::lock_guard<std::mutex> lk(this->items_mtx);
-					this->items_.insert(this->items_.end(), batch.begin(), batch.end());
+					items_->insert(items_->end(), batch.begin(), batch.end());
 				}
 				on_batch(batch);
 				batch.clear();
@@ -196,39 +225,42 @@ void HistoryManager::load_async(std::function< void() > on_loaded) {
 		try {
 			{
 				std::lock_guard<std::mutex> lock1(this->items_mtx);
-				this->items_.clear();
+				items_->clear();
 			}
 			{
+				OutputDebugPrint("lock filter item mtx1");
 				std::lock_guard<std::mutex> lock2(this->filtered_items_mtx);
-				this->filtered_items_.clear();
+				this->filtered_items_->clear();
 			}
 			std::deque<std::wstring> items, filtered_items;
 			std::wifstream in(L"alfred_history.txt");
 			if (in) {
 				std::wstring s;
 				while (std::getline(in, s)) if (!s.empty()) {
-					items_.push_back(s);
-					filtered_items_.push_back(s);
+					this->items_->push_back(s);
+					this->filtered_items_->push_back(s);
 				}
 			}
 
 			for (const auto& r : sys_util::GetQuickAccessItems()) {
-				items_.push_back(r);
-				filtered_items_.push_back(r);
+				items_->push_back(r);
+				filtered_items_->push_back(r);
 			}
 			for (const auto& r : sys_util::loadSystemRecent()) {
-				items_.push_back(r);
-				filtered_items_.push_back(r);
+				items_->push_back(r);
+				filtered_items_->push_back(r);
 			}
 
 			// batch-insert with minmal locking
 			{
 				std::lock_guard<std::mutex> lock1(this->items_mtx);
-				this->items_.insert(this->items_.end(), items.begin(), items.end());
+				this->items_->insert(this->items_->end(), items.begin(), items.end());
 			}
 			{
+
+				OutputDebugPrint("lock filter item mtx2");
 				std::lock_guard<std::mutex> lock2(this->filtered_items_mtx);
-				this->filtered_items_.insert(this->filtered_items_.end(), filtered_items.begin(), filtered_items.end());
+				this->filtered_items_->insert(this->filtered_items_->end(), filtered_items.begin(), filtered_items.end());
 			}
 			//this->filtered_items_ = this->items_;
 			if (cb) {
@@ -241,15 +273,14 @@ void HistoryManager::load_async(std::function< void() > on_loaded) {
 			}
 			this->loaded_.store(true);
 		}
-		catch (const std::exception& e) {
-			// log error
-			//std::wcerr << L"Exception loading history: " << e.what() << std::endl;
-		}
+		//catch (const std::exception& e) {
+		//	std::wcerr << L"Exception loading history: " << e.what() << std::endl;
+		//}
 		catch (...) {
 			// log Unknown exception in HistoryManager::load_async\n
 		}
+		OutputDebugPrint("load async thread exiting");
 		}
-
 	).detach();
 }
 
@@ -260,15 +291,13 @@ bool HistoryManager::loaded_done() const {
 }
 void HistoryManager::filterModifyItemSync(const std::wstring& pat) {
 	if (pat.empty()) {
-		this->filtered_items_ = this->items_;
+		filtered_items_ = items_;
 	}
 	else {
-		{
-			this->filtered_items_.clear();
-		}
-		for (const auto& item : this->items_) {
+		filtered_items_->clear();
+		for (const auto& item : *items_) {
 			if (string_util::fuzzy_match(pat, item)) {
-				this->filtered_items_.push_back(item);
+				filtered_items_->push_back(item);
 			}
 		}
 	}
@@ -287,13 +316,13 @@ void HistoryManager::filterModifyItemThread(const std::wstring& pat, std::functi
 		else {
 			{
 				std::lock_guard<std::mutex> lock(filtered_items_mtx);
-				this->filtered_items_.clear();
+				this->filtered_items_->clear();
 			}
 			// 先拷贝一份items_，减少加锁时间和粒度
 			std::deque<std::wstring> items_copy;
 			{
 				std::lock_guard<std::mutex> items_lock(items_mtx);
-				items_copy = this->items_;
+				items_copy = *items_;
 			}
 
 			// 局部变量做筛选，避免反复加锁
@@ -316,7 +345,7 @@ void HistoryManager::filterModifyItemThread(const std::wstring& pat, std::functi
 			// 一次性写回filtered_items_
 			{
 				std::lock_guard<std::mutex> filtered_lock(filtered_items_mtx);
-				this->filtered_items_ = std::move(result);
+				this->filtered_items_ = std::make_shared<std::deque<std::wstring>>(std::move(result));
 			}
 			//for (const auto& item : this->items_) {
 			//	if (string_util::fuzzy_match(pat, item)) {
@@ -331,18 +360,22 @@ void HistoryManager::filterModifyItemThread(const std::wstring& pat, std::functi
 
 std::vector<const std::wstring*> HistoryManager::filter(const std::wstring& pat) const {
 	std::vector<const std::wstring*> result;
-	for (const auto& item : items_) {
+	for (const auto& item : *items_) {
 		if (string_util::fuzzy_match(pat, item)) result.push_back(&item);
 	}
 	return result;
 }
 
 std::wstring HistoryManager::operator [] (size_t idx) const {
+
+		OutputDebugPrint("lock filter item mtx operator");
 	std::lock_guard<std::mutex> lock(filtered_items_mtx);
-	return filtered_items_[idx];
+	return ( * filtered_items_)[idx];
 }
 
 size_t HistoryManager::size() const {
+
+		OutputDebugPrint("lock filter item mtx size");
 	std::lock_guard<std::mutex> lock(filtered_items_mtx);
-	return filtered_items_.size();
+	return filtered_items_->size();
 }
