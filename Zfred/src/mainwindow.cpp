@@ -287,7 +287,7 @@ void MainWindow::parse_input(const std::wstring& text) {
         }
         else if (mode_ == Mode::History) {
             // todo
-            history_.filter(text);
+            //history_.filter(text);
         }
         else {
             mode_ = Mode::History;
@@ -350,9 +350,8 @@ void MainWindow::activate_filebrowser(int idx) {
     }
 }
 void MainWindow::activate_history(int idx) {
-	history_.withItems([&](const auto& hist) {
-		if (idx >= 0 && idx < (int)hist->size()) {
-			std::wstring curItem = (*hist)[idx];
+		if (idx >= 0 && idx < (int)history_.size()) {
+			std::wstring curItem = (history_)[idx];
 			if (PathIsDirectoryW(curItem.c_str())) {
 				mode_ = Mode::FileBrowser;
 				browser_.set_cwd(curItem);
@@ -388,7 +387,6 @@ void MainWindow::activate_history(int idx) {
             //        L"Command failed", MB_OK | MB_ICONWARNING);
             //}
         }
-    });
 }
 void MainWindow::activate_bookmarks(int idx) {
     auto bm = bookmarks_.all();
@@ -781,12 +779,6 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
             return 0;
         }
         else if (wParam == VK_UP || (wParam == L'P' && (GetKeyState(VK_CONTROL) & 0x8000))) {
-            //int n = (int)SendMessageW(self->listbox_, LB_GETCOUNT, 0, 0);
-            //if (n == 0) return 0;
-            //self->sel_ = (self->sel_ > 0) ? self->sel_ - 1 : n - 1;
-            //SendMessageW(self->listbox_, LB_SETCURSEL, self->sel_, 0);
-            //return 0;
-
             self->processListviewNavigation(-1);
             return 0;
         }

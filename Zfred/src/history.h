@@ -32,11 +32,11 @@ public:
     std::wstring operator [] (size_t idx) const;
     size_t size() const;
 
-	template<typename Func>
-	void withItems(Func&& fn) const {
-		std::lock_guard<std::mutex> lock(filtered_items_mtx);
-		fn(filtered_items_);
-	}
+	//template<typename Func>
+	//void withItems(Func&& fn) const {
+	//	std::lock_guard<std::mutex> lock(filtered_items_mtx);
+	//	fn(filtered_items_);
+	//}
 
     ~HistoryManager() {
         {
@@ -46,7 +46,6 @@ public:
         cv_.notify_one();
         if (filter_worker_.joinable()) {
             filter_worker_.join();
-            OutputDebugPrint("---------join filter thread worker");
         }
     }
 private:

@@ -1,4 +1,5 @@
-* TODO fuzzy search improve: multiple word
+* DONE fuzzy search improve: multiple word
+* TODO default select first one. if no one is mathed, call shellexecute (the case when sel_ == -1)
 
 * TODO setting:
 exclude list
