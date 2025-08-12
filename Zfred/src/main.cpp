@@ -7,6 +7,7 @@
 
 int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ PWSTR pCmdLine, _In_ int nCmdShow){
     #ifndef _DEBUG
+
     HANDLE hMutex = CreateMutexW(NULL, TRUE, L"zfred_SINGLETON_MUTEX");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         // Optionally: find the existing window and bring it to foreground, then exit
@@ -18,6 +19,10 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
         return 0; // exit, already running!
     }
     #endif
+
+#ifdef _DEBUG
+    //AllocConsole();
+#endif // _DEBUG
 
     INITCOMMONCONTROLSEX icex = { sizeof(icex), ICC_LISTVIEW_CLASSES };
     InitCommonControlsEx(&icex);
@@ -31,6 +36,9 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
     app.show(true); // Start hidden
     app.run();
 
+#ifdef _DEBUG
+    //FreeConsole();
+#endif // _DEBUG
     //GdiplusShutdown(gdiplusToken);
     return 0;
 }

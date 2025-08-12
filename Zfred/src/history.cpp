@@ -18,7 +18,6 @@ HistoryManager::HistoryManager(){
 			lock.unlock();
 
 			if (pat.empty()) {
-
 				std::lock_guard<std::mutex> lock1(items_mtx);
 				std::lock_guard<std::mutex> lock(filtered_items_mtx);
 				//this->filtered_items_ = this->items_;// shallow copy

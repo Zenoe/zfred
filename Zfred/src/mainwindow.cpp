@@ -6,6 +6,7 @@
 #include <vector>
 #include <sstream>
 #include <commctrl.h>
+#include <windowsx.h>
 
 #include <algorithm>
 #include <dwmapi.h> // For DwmExtendFrameIntoClientArea (link with dwmapi.lib)
@@ -19,8 +20,7 @@
 #include "constant.h"
 #include "utils/stringutil.h"
 #include "FsUtils.h"
-
-//#include "guihelper.h"
+#include "guihelper.h"
 MainWindow* MainWindow::self = nullptr;
 MainWindow::MainWindow(HINSTANCE hInstance)
     : hInstance_(hInstance), hwnd_(nullptr), edit_(nullptr), listbox_(nullptr), combo_mode_(nullptr),
@@ -336,7 +336,7 @@ void MainWindow::activate_filebrowser(int idx) {
         // copy, cause results may be clear by browser_.update()
         const auto e = results[idx];
         if (e.is_parent || e.is_dir) {
-            browser_.set_cwd(e.fullpath + L"\\");
+            browser_.set_cwd(e.fullpath + L"/");
             browser_.update(L"", show_hidden_);
             SetWindowTextW(edit_, browser_.cwd().c_str());
             update_listview();
@@ -460,7 +460,7 @@ void MainWindow:: autofill_input_by_selection() {
             if (sel_ >= 0 && sel_ < (int)entries.size()) {
                 const auto& e = entries[sel_];
                 if (e.is_dir || e.is_parent) {
-                    browser_.set_cwd(e.fullpath + L"\\");
+                    browser_.set_cwd(e.fullpath + L"/");
                     browser_.update(L"", show_hidden_);
                     update_listview();
                 }
@@ -851,6 +851,7 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
     }
     return DefSubclassProc(hEdit, msg, wParam, lParam);
 }
+
 void MainWindow::processListviewNavigation(int direction) {
     int n = (int)SendMessageW(hListview_, LVM_GETITEMCOUNT, 0, 0);
     if (n == 0) return ;
@@ -862,6 +863,26 @@ void MainWindow::processListviewNavigation(int direction) {
     selectListview(sel_);
 }
 
+LRESULT MainWindow::processContextMenu(WPARAM wParam, LPARAM lParam) {
+        if ((HWND)wParam == hListview_) {
+            int x = GET_X_LPARAM(lParam);
+            int y = GET_Y_LPARAM(lParam);
+
+            POINT pt = { x, y };
+            ScreenToClient(hListview_, &pt);
+
+            LVHITTESTINFO ht = { 0 };
+            ht.pt = pt;
+            int iItem = ListView_HitTest(hListview_, &ht);
+            if (iItem < 0) return 0;
+            std::wstring hittedItem;
+            if (mode_ == Mode::FileBrowser) {
+                hittedItem = browser_.results()[iItem].fullpath;
+            }
+			GuiHelper::ShowShellContextMenu(hwnd_, hListview_, hittedItem, x, y);
+        }
+        return 0;
+}
 LRESULT MainWindow::processWMCommand(WPARAM wParam) {
     if (LOWORD(wParam) == 2) {
         // list
@@ -890,6 +911,7 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 	if (!self) return DefWindowProcW(hwnd, msg, wParam, lParam);
 	switch (msg) {
         case WM_CREATE:{
+            CoInitialize(NULL); // Must call this to use shell COM interfaces!
             self->hListview_ = CreateWindowW(WC_LISTVIEWW, L"",
                                        WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_OWNERDATA | LVS_SINGLESEL | LVS_NOCOLUMNHEADER | LVS_SHOWSELALWAYS,
                                        PADDING, PADDING + EDIT_H + CONTROL_MARGIN, 0, 0,
@@ -908,12 +930,16 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         return 0;
     case WM_COMMAND:
         return self->processWMCommand(wParam);
+    case WM_CONTEXTMENU:
+        return self->processContextMenu(wParam, lParam);
+
     //case WM_ACTIVATE:
     //    if (wParam == WA_INACTIVE)
     //        self->show(false);
     //    break;
     case WM_DESTROY:
         self->save_all();
+        CoUninitialize();
         PostQuitMessage(0); break;
     case WM_CTLCOLORLISTBOX: {
         HDC hdc = (HDC)wParam;

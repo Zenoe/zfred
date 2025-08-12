@@ -77,6 +77,8 @@ private:
 
     LRESULT switchMode(WPARAM wParam);
     void processListviewNavigation(int direction);
+    // the context just likt the explorer's
+    LRESULT processContextMenu(WPARAM wParam, LPARAM lParam);
     LRESULT processWMCommand(WPARAM wpParam);
     void processReturn();
     LRESULT undo_delete_word();

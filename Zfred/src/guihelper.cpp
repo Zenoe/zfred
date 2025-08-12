@@ -1,8 +1,188 @@
 #include "guihelper.h"
+#include <shlobj.h>
+#include <filesystem>
+#include "FsUtils.h"
+
+#include "debugtool.h"
 using namespace Gdiplus;
 
-//#pragma comment(lib, "gdiplus.lib")
+#define ID_OPENFILEPATH   9001
+#define ID_COPYFILEPATH   9002
 
+//#pragma comment(lib, "gdiplus.lib")
+namespace fs = std::filesystem;
+
+void invoke_folder_verb(HWND hwnd, const std::wstring& folder_path, LPCWSTR wverb, LPCSTR verb) {
+    PIDLIST_ABSOLUTE pidlFolder = nullptr;
+    if (SUCCEEDED(SHParseDisplayName(folder_path.c_str(), nullptr, &pidlFolder, 0, nullptr))) {
+        IShellFolder* psfParent = nullptr;
+        LPCITEMIDLIST pidlChild = nullptr;
+        if (SUCCEEDED(SHBindToParent(pidlFolder, IID_IShellFolder, (void**)&psfParent, &pidlChild))) {
+            IContextMenu* pcmFolder = nullptr;
+            if (SUCCEEDED(psfParent->GetUIObjectOf(hwnd, 1, &pidlChild, IID_IContextMenu, nullptr, (void**)&pcmFolder))) {
+                HMENU hMenu = CreatePopupMenu();
+                if (hMenu) {
+                    if (SUCCEEDED(pcmFolder->QueryContextMenu(hMenu, 0, 1, 0x7FFF, CMF_NORMAL))) {
+                        CMINVOKECOMMANDINFOEX cmi = { 0 };
+                        cmi.cbSize = sizeof(cmi);
+                        cmi.fMask = CMIC_MASK_UNICODE;
+                        cmi.hwnd = hwnd;
+                        //cmi.lpVerb = "QTTabBar.openInView";
+                        //cmi.lpVerbW = L"QTTabBar.openInView";
+                        cmi.lpVerbW = wverb;
+                        cmi.lpVerb = verb;
+                        cmi.nShow = SW_SHOWNORMAL;
+
+                        // 使用完整路径而不是相对路径
+                        std::wstring full_path = folder_path;
+                        if (full_path.back() != L'\\') {
+                            full_path += L'\\';
+                        }
+
+                        cmi.lpDirectoryW = full_path.c_str();
+                        pcmFolder->InvokeCommand((LPCMINVOKECOMMANDINFO)&cmi);
+                    }
+                    DestroyMenu(hMenu);
+                }
+                pcmFolder->Release();
+            }
+            psfParent->Release();
+        }
+        CoTaskMemFree(pidlFolder);
+    }
+}
+void invoke_folder_verb1(HWND hwnd, const std::wstring& folder_path) {
+    PIDLIST_ABSOLUTE pidlFolder = nullptr;
+    if (SUCCEEDED(SHParseDisplayName(folder_path.c_str(), nullptr, &pidlFolder, 0, nullptr))) {
+        IShellFolder* psfDesktop = nullptr;
+        if (SUCCEEDED(SHGetDesktopFolder(&psfDesktop))) {
+            IContextMenu* pcmFolder = nullptr;
+            if (SUCCEEDED(psfDesktop->GetUIObjectOf(hwnd, 1, (LPCITEMIDLIST*)&pidlFolder, IID_IContextMenu, nullptr, (void**)&pcmFolder))) {
+                CMINVOKECOMMANDINFOEX cmi = { 0 };
+                cmi.cbSize = sizeof(cmi);
+                cmi.fMask = CMIC_MASK_UNICODE;
+                cmi.hwnd = hwnd;
+                cmi.lpVerb = "open";
+                cmi.lpVerbW = L"open";
+                cmi.lpDirectoryW = folder_path.c_str();
+                cmi.lpDirectory = NULL;
+                cmi.nShow = SW_SHOWNORMAL;
+                HRESULT a = pcmFolder->InvokeCommand((LPCMINVOKECOMMANDINFO)&cmi);
+                pcmFolder->Release();
+            }
+            psfDesktop->Release();
+        }
+        CoTaskMemFree(pidlFolder);
+    }
+}
+void GuiHelper::ShowShellContextMenu(HWND hwndParent, HWND hListView, std::wstring& path, int x, int y)
+{
+    fs::path p(path);
+    p.make_preferred();
+    std::wstring converted_path = p.wstring();
+    LPITEMIDLIST pidlItem = NULL;
+    HRESULT hr = SHParseDisplayName(converted_path.c_str(), NULL, &pidlItem, 0, NULL);
+    if (FAILED(hr) || !pidlItem) return;
+    LPITEMIDLIST pidlParent = ILClone(pidlItem);
+    ILRemoveLastID(pidlParent);
+
+    IShellFolder *psfFolder = NULL;
+    hr = SHBindToObject(NULL, pidlParent, NULL, IID_IShellFolder, (void**)&psfFolder);
+    if (FAILED(hr) || !psfFolder) { CoTaskMemFree(pidlParent); CoTaskMemFree(pidlItem); return; }
+    LPCITEMIDLIST pidlRel = ILFindLastID(pidlItem);
+
+    IContextMenu *pcm = NULL;
+    hr = psfFolder->GetUIObjectOf(hwndParent, 1, &pidlRel, IID_IContextMenu, NULL, (void**)&pcm);
+    if (SUCCEEDED(hr) && pcm)
+      {
+        HMENU hMenu = CreatePopupMenu();
+
+        InsertMenu(hMenu, 0, MF_BYPOSITION | MF_STRING, ID_OPENFILEPATH, L"Open filepath");
+        InsertMenu(hMenu, 1, MF_BYPOSITION | MF_STRING, ID_COPYFILEPATH, L"Copy filepath");
+        InsertMenu(hMenu, 2, MF_BYPOSITION | MF_SEPARATOR, 0, NULL);
+        pcm->QueryContextMenu(hMenu, 3, 1, 0x7FFF, CMF_EXPLORE);
+
+        int menuCount = GetMenuItemCount(hMenu);
+        for (UINT i = 3; i < menuCount; ++i) {
+            UINT cmdId = GetMenuItemID(hMenu, i);
+            if (cmdId == -1) continue; // Separator
+            char verb[256] = { 0 };
+            WCHAR verbW[256] = { 0 };
+
+            if (SUCCEEDED(pcm->GetCommandString(cmdId, GCS_VERBW, NULL, (char*)verbW, ARRAYSIZE(verbW)))) {
+                OutputDebugPrint(verbW);
+            }
+        }
+        int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_TOPALIGN | TPM_LEFTALIGN, x, y, 0, hwndParent, NULL);
+        if (cmd)
+          {
+            if (cmd == ID_OPENFILEPATH) {
+                std::wstring dir = FsUtils::is_dir(converted_path) ? converted_path : FsUtils::get_parent_path(converted_path);
+                invoke_folder_verb(hwndParent, dir, L"QTTabBar.openInView", "QTTabBar.openInView");
+
+    //            // Delegate "open" to shell verb
+    //            CMINVOKECOMMANDINFOEX cmi = { 0 };
+    //            std::wstring dir = converted_path;
+    //            if (!FsUtils::is_dir(converted_path)) {
+    //                // not dir ,get parent dir
+    //                dir = FsUtils::get_parent_path(converted_path);
+				//	//std::wstring cmd = L"/select,\"" + dir + L"\"";
+				//	//ShellExecute(NULL, L"open", L"explorer.exe", cmd.c_str(), NULL, SW_SHOWNORMAL);
+    //            }
+    //            //else {
+				//	cmi.cbSize = sizeof(cmi);
+				//	cmi.fMask = CMIC_MASK_UNICODE;
+				//	cmi.hwnd = hwndParent;
+				//	cmi.lpVerb = "QTTabBar.openInView";
+				//	cmi.lpVerbW = L"QTTabBar.openInView";
+				//	cmi.lpDirectoryW = dir.c_str();
+				//	cmi.lpDirectory = NULL;
+				//	cmi.nShow = SW_SHOWNORMAL;
+				//	pcm->InvokeCommand((LPCMINVOKECOMMANDINFO)&cmi);
+				////}
+			}
+			else if (cmd == ID_COPYFILEPATH) {
+				if (OpenClipboard(hwndParent)) {
+					EmptyClipboard();
+					size_t sz = (converted_path.length() + 1) * sizeof(wchar_t);
+					HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, sz);
+					if (hMem) {
+						wchar_t* pMem = (wchar_t*)GlobalLock(hMem);
+						if (pMem) {
+							memcpy(pMem, converted_path.c_str(), sz);
+							GlobalUnlock(hMem);
+							SetClipboardData(CF_UNICODETEXT, hMem);
+						}
+					}
+					CloseClipboard();
+				}
+			}
+			else {
+				CMINVOKECOMMANDINFOEX cmi = { 0 };
+				cmi.cbSize = sizeof(cmi);
+				cmi.fMask = CMIC_MASK_UNICODE;
+                cmi.hwnd = hwndParent;
+                cmi.lpVerb = MAKEINTRESOURCEA(cmd - 1);
+                if (FsUtils::is_dir(converted_path)) {
+                    // only when openning a dir should this property be set
+                    // This property should only be set when opening a directory
+					cmi.lpDirectoryW = FsUtils::get_parent_path(converted_path).c_str();
+                    //std::wstring a = L"";
+                    //cmi.lpDirectoryW = a.c_str();
+                }
+                cmi.lpDirectory = NULL;
+                cmi.nShow = SW_SHOWNORMAL;
+
+                pcm->InvokeCommand((LPCMINVOKECOMMANDINFO)&cmi);
+            }
+        }
+        DestroyMenu(hMenu);
+        pcm->Release();
+    }
+    psfFolder->Release();
+    CoTaskMemFree(pidlParent);
+    CoTaskMemFree(pidlItem);
+}
 // this would make the corner jagged
 void GuiHelper::SetWindowRoundRgn(HWND hwnd, int width, int height, int radius)
 {
