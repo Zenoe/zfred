@@ -21,6 +21,9 @@
 #include "utils/stringutil.h"
 #include "FsUtils.h"
 #include "guihelper.h"
+
+HBRUSH gEditBrush = nullptr;
+
 MainWindow* MainWindow::self = nullptr;
 MainWindow::MainWindow(HINSTANCE hInstance)
     : hInstance_(hInstance), hwnd_(nullptr), edit_(nullptr), listbox_(nullptr), combo_mode_(nullptr),
@@ -60,6 +63,19 @@ bool MainWindow::create() {
         nullptr, nullptr, hInstance_, nullptr);
     if (!hwnd_) return false;
 
+    BOOL value = TRUE;
+    DwmSetWindowAttribute(hwnd_, DWMWA_NCRENDERING_ENABLED, &value, sizeof(value));
+    DwmSetWindowAttribute(hwnd_, DWMWA_NCRENDERING_POLICY, &value, sizeof(value));
+
+    // Modern border color (Windows 10+)
+    COLORREF borderColor = RGB(180, 180, 180); // Light gray border
+    DwmSetWindowAttribute(hwnd_, DWMWA_BORDER_COLOR, &borderColor, sizeof(borderColor));
+
+    //if (IsWindows10OrGreater()) {
+    //    DWORD cornerPref = 2; // DWMWCP_ROUND
+    //    DwmSetWindowAttribute(hwnd_, 33, &cornerPref, sizeof(cornerPref)); // DWMWA_WINDOW_CORNER_PREFERENCE = 33
+    //}
+    
     // --------- Make Background White and Slightly Transparent -----------
     SetLayeredWindowAttributes(hwnd_, 0, 245, LWA_ALPHA); // 240/255 opacity (more readable than 200)
 
@@ -115,7 +131,6 @@ void MainWindow::show(bool visible) {
 		SetForegroundWindow(hwnd_);
 		SetActiveWindow(hwnd_);
 		if (last_input_.empty()) {
-			//mode_ = Mode::History;  // default/initial mode 
 			SetWindowTextW(edit_, L"");
 			update_listview();
 		}
@@ -151,8 +166,7 @@ LRESULT MainWindow::undo_delete_word() {
 		wchar_t buf[512];
 		GetWindowTextW(self->edit_, buf, 511);
         std::wstring old_content(buf);
-        // insert  text into edit_ in the pos caret
-               // 插入 `text` 到 `caret` 位置
+        // insert  text into edit_ in the pos caret 插入 `text` 到 `caret` 位置
         if (caret <= old_content.size()) {
             old_content.insert(caret, text);
         }
@@ -160,8 +174,6 @@ LRESULT MainWindow::undo_delete_word() {
             // 如果caret越界，插到最后
             old_content += text;
         }
-
-        // 更新EDIT内容
         SetWindowTextW(self->edit_, old_content.c_str());
         // 恢复插入点到插入后的位置
         SendMessageW(self->edit_, EM_SETSEL, caret + text.size(), caret + text.size());
@@ -173,7 +185,6 @@ LRESULT MainWindow::undo_delete_word() {
 void MainWindow::update_listview() {
     ListView_SetItemState(hListview_, -1, 0, LVIS_SELECTED | LVIS_FOCUSED);
     if (mode_ == Mode::History) {
-		// history_.filterModifyItem(last_input_);
 		history_.request_filter(last_input_, [this](){
 		//history_.filterModifyItemThread(last_input_, [this](){
 			if (mode_ != Mode::History) {
@@ -355,14 +366,15 @@ void MainWindow::activate_history(int idx) {
 		if (idx >= 0 && idx < (int)history_.size()) {
 			std::wstring curItem = (history_)[idx];
 			if (PathIsDirectoryW(curItem.c_str())) {
-				mode_ = Mode::FileBrowser;
-				browser_.set_cwd(curItem);
-				browser_.update(L"", show_hidden_);
-				SetWindowTextW(edit_, curItem.c_str());
-                SendMessageW(edit_, EM_SETSEL, curItem.size(), curItem.size());
-                mode_ = Mode::FileBrowser;
-                SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
-                update_listview();
+                GuiHelper::openFolder(hwnd_, curItem);
+				//mode_ = Mode::FileBrowser;
+				//browser_.set_cwd(curItem);
+				//browser_.update(L"", show_hidden_);
+				//SetWindowTextW(edit_, curItem.c_str());
+    //            SendMessageW(edit_, EM_SETSEL, curItem.size(), curItem.size());
+    //            mode_ = Mode::FileBrowser;
+    //            SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
+    //            update_listview();
 			}
 			else if(FsUtils::is_file(curItem.c_str())){
 				fileactions::launch(curItem);
@@ -413,21 +425,20 @@ void MainWindow:: autofill_input_by_selection() {
     if (sel_ < 0) return;  // no item in the listview
     std::wstring text;
     auto autoFillDir = [this](std::wstring& text) {
-            text = text + L"/";
-            SetWindowTextW(edit_, text.c_str());
-            SendMessageW(edit_, EM_SETSEL, text.size(), text.size());
-            mode_ = Mode::FileBrowser;
-            SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
-            browser_.set_cwd(text);
-            browser_.update(L"", show_hidden_);
-            update_listview();
-    };
-    if (mode_ == Mode::FileBrowser) {
-        const auto& entries = browser_.results();
+		if (text.back() != L'\\' && text.back() != L'/') text += L'/';
+		SetWindowTextW(edit_, text.c_str());
+		SendMessageW(edit_, EM_SETSEL, text.size(), text.size());
+		mode_ = Mode::FileBrowser;
+		SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
+		browser_.set_cwd(text);
+		browser_.update(L"", show_hidden_);
+		update_listview();
+	};
+	if (mode_ == Mode::FileBrowser) {
+		const auto& entries = browser_.results();
         if (sel_ >= 0 && sel_ < (int)entries.size()) {
             const auto& e = entries[sel_];
             text = e.fullpath;
-            OutputDebugPrint("autofill: ", text);
             if (e.is_dir || e.is_parent) {
                 if (text.back() != L'\\' && text.back() != L'/')
                     text += L'/'; 
@@ -917,6 +928,7 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 	if (!self) return DefWindowProcW(hwnd, msg, wParam, lParam);
 	switch (msg) {
         case WM_CREATE:{
+            gEditBrush = CreateSolidBrush(RGB(102, 205, 170));
             CoInitialize(NULL); // Must call this to use shell COM interfaces!
             self->hListview_ = CreateWindowW(WC_LISTVIEWW, L"",
                                        WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_OWNERDATA | LVS_SINGLESEL | LVS_NOCOLUMNHEADER | LVS_SHOWSELALWAYS,
@@ -943,9 +955,30 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     //    if (wParam == WA_INACTIVE)
     //        self->show(false);
     //    break;
+    case WM_CTLCOLOREDIT:
+    {
+        if ((HWND)lParam == self->edit_) {
+			//return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
+            HDC hdcEdit = (HDC)wParam;
+            SetBkMode(hdcEdit, OPAQUE);
+            SetBkColor(hdcEdit, RGB(144, 238, 144));
+            //SetTextColor(hdcEdit, RGB(0, 0, 0));
+            return (LRESULT)gEditBrush;
+        }
+        else {
+			HDC hdc = (HDC)wParam;
+			SetBkColor(hdc, RGB(255, 255, 255));
+			SetTextColor(hdc, RGB(25, 25, 25));
+			static HBRUSH hbr = CreateSolidBrush(RGB(255, 255, 255));
+			return (INT_PTR)hbr;
+        }
+        // else: default color for other edits
+        //return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
+    }
     case WM_DESTROY:
         self->save_all();
         CoUninitialize();
+        DeleteObject(gEditBrush);
         PostQuitMessage(0); break;
     case WM_CTLCOLORLISTBOX: {
         HDC hdc = (HDC)wParam;
@@ -955,13 +988,6 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         return (INT_PTR)hbr;
     }
 
-    case WM_CTLCOLOREDIT: {
-        HDC hdc = (HDC)wParam;
-        SetBkColor(hdc, RGB(255, 255, 255));
-        SetTextColor(hdc, RGB(25, 25, 25));
-        static HBRUSH hbr = CreateSolidBrush(RGB(255, 255, 255));
-        return (INT_PTR)hbr;
-    }
     case WM_LBUTTONDOWN:
         // Make client area work like a title bar for moving window
         ReleaseCapture();
@@ -1006,6 +1032,18 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             self->update_spinner();
         }
 		return 0;
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        RECT r;
+        GetClientRect(hwnd, &r);
+        // Draw border
+        HBRUSH br = CreateSolidBrush(RGB(180, 180, 180)); // light gray
+        FrameRect(hdc, &r, br);
+        DeleteObject(br);
+        EndPaint(hwnd, &ps);
+        break;
+    }
     default:
         return DefWindowProcW(hwnd, msg, wParam, lParam);
     }

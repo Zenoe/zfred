@@ -4,6 +4,7 @@
 #include <string>
 class GuiHelper {
 public:
+    static void openFolder(HWND hwndParent, std::wstring& folder_path);
     static void ShowShellContextMenu(HWND hwndParent, HWND hListView, std::wstring& path, int x, int y);
     static void SetWindowRoundRgn(HWND hwnd, int width, int height, int radius);
 

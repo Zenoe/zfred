@@ -33,7 +33,18 @@ void fileactions::copy_path_to_clipboard(const std::wstring& filepath) {
         EmptyClipboard();
         size_t sz = (filepath.size() + 1) * sizeof(wchar_t);
         HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, sz);
-        memcpy(GlobalLock(hMem), filepath.c_str(), sz);
+        if (!hMem) {
+            CloseClipboard();
+            return;
+        }
+        void* ptr = GlobalLock(hMem);
+        if (!ptr) {
+            GlobalFree(hMem);
+            CloseClipboard();
+            return;
+        }
+
+        memcpy(ptr, filepath.c_str(), sz);
         GlobalUnlock(hMem);
         SetClipboardData(CF_UNICODETEXT, hMem);
         CloseClipboard();

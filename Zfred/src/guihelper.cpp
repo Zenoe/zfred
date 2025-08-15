@@ -12,6 +12,7 @@ using namespace Gdiplus;
 //#pragma comment(lib, "gdiplus.lib")
 namespace fs = std::filesystem;
 
+
 void invoke_folder_verb(HWND hwnd, const std::wstring& folder_path, LPCWSTR wverb, LPCSTR verb) {
     PIDLIST_ABSOLUTE pidlFolder = nullptr;
     if (SUCCEEDED(SHParseDisplayName(folder_path.c_str(), nullptr, &pidlFolder, 0, nullptr))) {
@@ -46,6 +47,14 @@ void invoke_folder_verb(HWND hwnd, const std::wstring& folder_path, LPCWSTR wver
     }
 }
 
+void GuiHelper::openFolder(HWND hwndParent, std::wstring& folder_path){
+    bool qttab = true;
+    // todo
+    if (qttab)
+        invoke_folder_verb(hwndParent, folder_path, L"QTTabBar.openInView", "QTTabBar.openInView");
+    else
+        invoke_folder_verb(hwndParent, folder_path, L"open", "open");
+}
 void GuiHelper::ShowShellContextMenu(HWND hwndParent, HWND hListView, std::wstring& path, int x, int y)
 {
     fs::path p(path);
@@ -94,11 +103,8 @@ void GuiHelper::ShowShellContextMenu(HWND hwndParent, HWND hListView, std::wstri
 		{
 			if (cmd == ID_OPENFILEPATH) {
 				std::wstring dir = FsUtils::is_dir(converted_path) ? converted_path : FsUtils::get_parent_path(converted_path);
+                openFolder(hwndParent, dir);
 				// want the context menu for a file, but to act as if it's on the parent folder (for example, show the context menu for the folder, not the file), you need to obtain the PIDL for the folder (not the file), and use it when assembling the context menu.
-				if (qttab)
-					invoke_folder_verb(hwndParent, dir, L"QTTabBar.openInView", "QTTabBar.openInView");
-				else
-					invoke_folder_verb(hwndParent, dir, L"open", "open");
 
     //            // Delegate "open" to shell verb
     //            CMINVOKECOMMANDINFOEX cmi = { 0 };
