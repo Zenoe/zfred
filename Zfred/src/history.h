@@ -27,11 +27,12 @@ public:
     bool loaded_done() const;
     std::vector<const std::wstring*> filter(const std::wstring& pat) const;
     void filterModifyItemSync(const std::wstring& pat);
-    void filterModifyItemThread(const std::wstring& pat, std::function<void()> filterDone);
+    //void filterModifyItemThread(const std::wstring& pat, std::function<void()> filterDone);
 
     std::wstring operator [] (size_t idx) const;
     size_t size() const;
 
+    std::vector<std::wstring> get_page(int startRow, size_t pageSize);
 	//template<typename Func>
 	//void withItems(Func&& fn) const {
 	//	std::lock_guard<std::mutex> lock(filtered_items_mtx);

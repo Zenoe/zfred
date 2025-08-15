@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <locale>
 #include <vector>
-
 namespace string_util {
 
     // Helper for tolower, handles wchar_t and char

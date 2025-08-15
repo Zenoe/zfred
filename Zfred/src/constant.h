@@ -1,5 +1,7 @@
 #pragma once
 
+constexpr int PAGE_SIZE = 80;
+
 constexpr int PADDING = 8;
 //constexpr int EDIT_W = WND_W - (PADDING << 1);
 constexpr int EDIT_W = 560;

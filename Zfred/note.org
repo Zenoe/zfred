@@ -1,6 +1,6 @@
 * DONE fuzzy search improve: multiple word
 * TODO default select first one. if no one is mathed, call shellexecute (the case when sel_ == -1)
-
+* TODO 回车应该是打开，而不是autofill
 * TODO setting:
 exclude list
 * TODO command listview
@@ -15,6 +15,7 @@ exclude list
 ** TODO dbclick
 ** TODO file explorer
 * TODO command/history save to sqlite?
+* TODO open file path in history/bookmark mode
 
 
 

@@ -2,6 +2,7 @@
 #include <fstream>
 #include "utils/sysutil.h"
 #include <thread>
+#include <algorithm>
 #include <unordered_set>
 #include "utils/stringutil.h"
 #include "utils/ahocorasick.h"
@@ -42,13 +43,14 @@ HistoryManager::HistoryManager(){
 				// 局部变量做筛选，避免反复加锁
 				std::deque<std::wstring> result;
 				auto t0 = std::chrono::steady_clock::now();
-				// Build Aho-Corasick only ONCE
 				std::vector<std::wstring_view> pattern_views;
+				// split_by_space 参数是引用, pat是局部拷贝了一份成员变量，所以不会在split_by_space中途执行过程中被外面修改
 				std::vector<std::wstring> pats = string_util::split_by_space(pat);
 				pattern_views.reserve(pats.size());
 				for (const auto& s : pats)
 					pattern_views.push_back(s);
 
+				// Build Aho-Corasick only ONCE. move it out of the for loop
 				AhoCorasick<wchar_t> ac;
 				ac.build(pattern_views);
 
@@ -62,19 +64,6 @@ HistoryManager::HistoryManager(){
 						result.push_back(item);
 					}
 				}
-				//for (const auto& item : items_copy) {
-				//	std::vector<std::wstring_view> pattern_views;
-				//	// todo split_by_space 参数是引用, pat 可能在split_by_space中途执行过程中被外面修改
-				//	std::vector<std::wstring> pats = string_util::split_by_space(pat);
-				//	pattern_views.reserve(pats.size());
-				//	for (const auto& s : pats)
-				//		pattern_views.push_back(s);
-
-				//	std::wstring_view item_view(item);
-				//	if (ah_substring_match(pattern_views, item_view)) {
-				//		result.push_back(item);
-				//	}
-				//}
 				auto t1 = std::chrono::steady_clock::now();
 
 				OutputDebugPrint("time const: ", std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
@@ -138,12 +127,14 @@ void HistoryManager::allWith(std::function<void(const std::deque<std::wstring>&)
 	//cb(filtered_items_);
 	std::shared_ptr<const std::deque<std::wstring>> snapshot;
 	{
+		OutputDebugPrint("lockfiltered_items_mtx");
 		std::lock_guard<std::mutex> lock(filtered_items_mtx);
-		if(!filtered_items_)
-			MessageBox(nullptr, L"filter items_ is null", L"caption", 0);
+		//if(!filtered_items_)
+		//	MessageBox(nullptr, L"filter items_ is null", L"caption", 0);
 
 		snapshot = filtered_items_; // Refcount increment
 	}
+	OutputDebugPrint("lockfiltered_items_mtx endddddddd");
 	cb(*snapshot);
 	//return filtered_items_;
 }
@@ -290,13 +281,14 @@ void HistoryManager::filterModifyItemSync(const std::wstring& pat) {
 	//    return !string_util::fuzzy_match(pat, item);
 	//    }), items_.end());
 }
+// move the filterModifyItemThread function to a named thread in ctor. in order to join it in dtor
+/*
 void HistoryManager::filterModifyItemThread(const std::wstring& pat, std::function<void()> filterDone) {
 	std::thread([&, filterDone, this]() {
 		if (pat.empty()) {
 			std::lock_guard<std::mutex> lock(filtered_items_mtx);
 			//std::lock_guard<std::mutex> lock2(items_mtx);
 			this->filtered_items_ = this->items_; // Restore all
-			// std::this_thread::sleep_for(std::chrono::milliseconds(2000)); // Let server start
 		}
 		else {
 			{
@@ -341,7 +333,7 @@ void HistoryManager::filterModifyItemThread(const std::wstring& pat, std::functi
 		}
 		filterDone();
 		}).detach();
-}
+}*/
 
 std::vector<const std::wstring*> HistoryManager::filter(const std::wstring& pat) const {
 	std::vector<const std::wstring*> result;
@@ -359,4 +351,18 @@ std::wstring HistoryManager::operator [] (size_t idx) const {
 size_t HistoryManager::size() const {
 	std::lock_guard<std::mutex> lock(filtered_items_mtx);
 	return filtered_items_->size();
+}
+
+std::vector<std::wstring> HistoryManager::get_page(int startRow, size_t pageSize) {
+	std::vector<std::wstring> results; 
+	if (!filtered_items_ || startRow > filtered_items_->size()) return results;
+	std::lock_guard<std::mutex> lock(filtered_items_mtx);
+	size_t end = (std::min)(filtered_items_->size(), pageSize+startRow);
+	results.reserve(end - startRow);
+	auto it = filtered_items_->begin() + startRow;
+	for (size_t i = startRow; i < end; ++i, ++it) {
+		results.push_back(*it);
+	}
+
+	return results;
 }

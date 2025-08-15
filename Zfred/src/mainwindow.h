@@ -50,11 +50,14 @@ private:
     // State: last input, for context
     std::wstring last_input_;
 
+    std::vector<std::wstring> uiCachePage;
+    std::atomic<int> cachePageStart{ 0 };
+    void updateUICachePage(int startRow);
+
     void update_listview();
     //void update_list();
     void parse_input(const std::wstring& text);
 
-    void activate_command(int idx);
     void activate_filebrowser(int idx);
     void activate_history(int idx);
     void activate_bookmarks(int idx);

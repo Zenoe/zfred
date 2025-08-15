@@ -50,7 +50,8 @@ bool MainWindow::create() {
     RegisterClassExW(&wc);
 
     int x = (GetSystemMetrics(SM_CXSCREEN) - WND_W) / 2, y = 100;
-    LONG exStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED;
+    //LONG exStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED;
+    LONG exStyle = WS_EX_TOOLWINDOW | WS_EX_LAYERED;
     // WS_EX_APPWINDOW Forces window to show in taskbar/Alt-Tab (useful with popup windows) 
     hwnd_ = CreateWindowExW(exStyle,
         wc.lpszClassName, L"zfred",
@@ -180,6 +181,7 @@ void MainWindow::update_listview() {
 				return;
 			}
 			ListView_SetItemCountEx(this->hListview_, this->history_.size(), LVSICF_NOINVALIDATEALL);
+            updateUICachePage(0);
 			// Force update visible rows
 			InvalidateRect(this->hListview_, NULL, TRUE);
 			UpdateWindow(this->hListview_);
@@ -637,9 +639,13 @@ void MainWindow::update_spinner() {
     SetWindowTextW(edit_, display.c_str());
 }
 
+void MainWindow::updateUICachePage(int startRow) {
+    uiCachePage = history_.get_page(startRow, PAGE_SIZE);
+    cachePageStart.store(startRow);
+}
+
 LRESULT MainWindow::processAppendHistory() {
     ListView_SetItemCountEx(hListview_, history_.size(), LVSICF_NOINVALIDATEALL);
-
     // for listbox
     //if (mode_ == Mode::History) {
     //    update_list();
@@ -656,26 +662,26 @@ void MainWindow::processListViewContent(LPARAM lParam) {
     NMLVDISPINFOW* plvdi = reinterpret_cast<NMLVDISPINFOW*>(lParam);
     int iItem = plvdi->item.iItem;
 
+    // check if text information is requested 
     if (!(plvdi->item.mask & LVIF_TEXT)) return;
 
     if (mode_ == Mode::History) {
-        history_.allWith([&](const auto& items) {
-			if (iItem < static_cast<int>(items.size())) {
-				const std::wstring& path = items[iItem];
-				set_item_label(plvdi, path);
-			}
-			});
-
-		//auto loadItem = [&](const auto& items) {
-		//    NMLVDISPINFOW* plvdi = (NMLVDISPINFOW*)lParam;
-		//    int iItem = plvdi->item.iItem;
-		//    if ((plvdi->item.mask & LVIF_TEXT) && iItem < (int)items.size()) {
-		//        const std::wstring& path = items[iItem];
-		//        std::wstring label = (PathIsDirectoryW(path.c_str()) ? L"🗂 " : L"🗎 ") + path;
-		//        wcsncpy_s(plvdi->item.pszText, plvdi->item.cchTextMax, label.c_str(), _TRUNCATE);
-		//    }
-		//};
-			//loadItem(history_.all());
+        if (!uiCachePage.empty() && iItem >= cachePageStart && iItem < cachePageStart + PAGE_SIZE) {
+            //OutputDebugPrint("hit cache");
+			set_item_label(plvdi, uiCachePage[iItem - cachePageStart]);
+        }
+        else {
+			history_.allWith([&](const auto& items) {
+				if (iItem < static_cast<int>(items.size())) {
+                    int newStart = (iItem / PAGE_SIZE) * PAGE_SIZE;
+                    updateUICachePage(newStart);
+					//const std::wstring& path = items[iItem];
+					//set_item_label(plvdi, path);
+    
+					set_item_label(plvdi, uiCachePage[iItem - cachePageStart]);
+				}
+				});
+		}
 
 	  //      //std::deque<std::wstring> items = history_.all(); // copy huge data, cause listview populating slow
 			//NMLVDISPINFOW* plvdi = (NMLVDISPINFOW*)lParam;
@@ -970,7 +976,6 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         //}
         //delete batch;
         return self->processAppendHistory();
-        return 0;
     }
     case WM_DEBOUNCED_UPDATE_LIST:
         self->queued_update_ = false;
@@ -984,7 +989,7 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 
     case WM_NOTIFY:
         if ((HWND)((LPNMHDR)lParam)->hwndFrom == self->hListview_) {
-            if (((LPNMHDR)lParam)->code == LVN_GETDISPINFOW) {
+            if (((NMHDR*)lParam)->code == LVN_GETDISPINFOW) {
                 self->processListViewContent(lParam);
             }
         }
@@ -992,9 +997,7 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     case WM_SIZE:{
         int width = LOWORD(lParam), height = HIWORD(lParam);
         if (self->hListview_) {
-            // MoveWindow(self->hListview_, PADDING, PADDING + EDIT_H + CONTROL_MARGIN, LIST_W, height-EDIT_H, TRUE);
-            //OutputDebugPrint("wm_size", height);
-            MoveWindow(self->hListview_, PADDING, PADDING + EDIT_H + CONTROL_MARGIN, width, height-EDIT_H, TRUE);
+            MoveWindow(self->hListview_, PADDING, PADDING + EDIT_H + CONTROL_MARGIN, width-PADDING, height-EDIT_H-PADDING, TRUE);
         }
         break;
     }
