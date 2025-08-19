@@ -22,6 +22,11 @@
 #include "FsUtils.h"
 #include "guihelper.h"
 
+#define FLAT_BORDER_SUBCLASS_ID 1001
+
+//const COLORREF EDIT_BK_COLOR = RGB(144, 238, 144);
+const COLORREF EDIT_BK_COLOR = HEXTOCOLORREF(0xEDFBF3);
+const COLORREF LISTVIEW_BK_COLOR = RGB(247, 248, 250);
 HBRUSH gEditBrush = nullptr;
 
 MainWindow* MainWindow::self = nullptr;
@@ -53,8 +58,7 @@ bool MainWindow::create() {
     RegisterClassExW(&wc);
 
     int x = (GetSystemMetrics(SM_CXSCREEN) - WND_W) / 2, y = 100;
-    //LONG exStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED;
-    LONG exStyle = WS_EX_TOOLWINDOW | WS_EX_LAYERED;
+    LONG exStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED;
     // WS_EX_APPWINDOW Forces window to show in taskbar/Alt-Tab (useful with popup windows) 
     hwnd_ = CreateWindowExW(exStyle,
         wc.lpszClassName, L"zfred",
@@ -90,11 +94,11 @@ bool MainWindow::create() {
 
     edit_ = CreateWindowExW(0, L"EDIT", L"",
         WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NOHIDESEL | ES_LEFT | WS_BORDER, // Add flat border,
-        PADDING, PADDING, EDIT_W, EDIT_H, hwnd_, (HMENU)1, hInstance_, nullptr);
+        PADDING, PADDING, EDIT_W, EDIT_H, hwnd_, (HMENU)EDITOR_ID, hInstance_, nullptr);
 
     // Use nice size and font (Segoe UI, 18px height)
     HFONT hFont = CreateFontW(
-        18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
         DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
 
@@ -109,16 +113,15 @@ bool MainWindow::create() {
     // SendMessageW(listbox_, WM_SETFONT, (WPARAM)hFont, TRUE);
 
     combo_mode_ = CreateWindowExW(0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST,
-         PADDING + EDIT_W +CONTROL_MARGIN, PADDING, COMBO_W, COMBO_H, hwnd_, (HMENU)3, hInstance_, nullptr);
+        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | CBS_HASSTRINGS | CBS_OWNERDRAWFIXED,
+         PADDING + EDIT_W +CONTROL_MARGIN, PADDING, COMBO_W, 0, hwnd_, (HMENU)COMBO_ID, hInstance_, nullptr);  // height param does not take effect when | CBS_OWNERDRAWFIXED, set height by CB_SETITEMHEIGHT
+    SendMessage(combo_mode_, CB_SETITEMHEIGHT, -1, 18); // to level with edit control(whose height is 24)  // Static portion
+    SendMessage(combo_mode_, CB_SETITEMHEIGHT, 0, 24); // to level with edit control(whose height is 24)  // Dropdown portion
+    //SetWindowSubclass(combo_mode_, FlatComboSubclassProc, FLAT_BORDER_SUBCLASS_ID, 0);
 
-    // After creating the ComboBox:
-    SendMessageW(combo_mode_, CB_SETITEMHEIGHT, (WPARAM)-1, (LPARAM)(EDIT_H - 4));  // Adjust as needed
-    SendMessageW(combo_mode_, WM_SETFONT, (WPARAM)hFont, TRUE);
     for (int i = 0; i < static_cast<int>(Mode::Count); ++i) {
         SendMessageW(combo_mode_, CB_ADDSTRING, 0, (LPARAM)ModeToString(static_cast<Mode>(i)));
     }
-    SendMessageW(combo_mode_, CB_SETCURSEL, 0, 0);
     SendMessageW(combo_mode_, CB_SETCURSEL, 0, 0);
 
     SetWindowSubclass(edit_, &MainWindow::EditProc, 0, 0);
@@ -349,10 +352,7 @@ void MainWindow::activate_filebrowser(int idx) {
         // copy, cause results may be clear by browser_.update()
         const auto e = results[idx];
         if (e.is_parent || e.is_dir) {
-            browser_.set_cwd(e.fullpath + L"/");
-            browser_.update(L"", show_hidden_);
-            SetWindowTextW(edit_, browser_.cwd().c_str());
-            update_listview();
+            GuiHelper::openFolder(hwnd_, e.fullpath);
             history_.add(e.fullpath);
         }
         else if (e.is_file) {
@@ -367,14 +367,6 @@ void MainWindow::activate_history(int idx) {
 			std::wstring curItem = (history_)[idx];
 			if (PathIsDirectoryW(curItem.c_str())) {
                 GuiHelper::openFolder(hwnd_, curItem);
-				//mode_ = Mode::FileBrowser;
-				//browser_.set_cwd(curItem);
-				//browser_.update(L"", show_hidden_);
-				//SetWindowTextW(edit_, curItem.c_str());
-    //            SendMessageW(edit_, EM_SETSEL, curItem.size(), curItem.size());
-    //            mode_ = Mode::FileBrowser;
-    //            SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
-    //            update_listview();
 			}
 			else if(FsUtils::is_file(curItem.c_str())){
 				fileactions::launch(curItem);
@@ -772,20 +764,38 @@ LRESULT MainWindow::switchMode(WPARAM wParam) {
 
 LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR) {
 	if (!self) return DefSubclassProc(hEdit, msg, wParam, lParam);
+    auto updateInput = [&]() {
+        wchar_t buffer[512];
+        GetWindowTextW(hEdit, buffer, 511);
+        self->parse_input(buffer);
+    };
 	switch (msg) {
 	case WM_KEYDOWN:
 		if (wParam == VK_RETURN) {
 			self->processReturn();
 			return 0;
 		}
-		else if (wParam == VK_TAB) {
+        if ((wParam == 'A' || wParam == 'a') && (GetKeyState(VK_CONTROL) & 0x8000)) {
+            SendMessage(hEdit, EM_SETSEL, 0, -1);
+            return 0; // swallow the key
+        }
+        if (((wParam == 'V' || wParam == 'v') && (GetKeyState(VK_CONTROL) & 0x8000)) ||
+            ((wParam == 'X' || wParam == 'x') && (GetKeyState(VK_CONTROL) & 0x8000))
+            )
+        {
+            // Ctrl+V: Paste, let control handle first, then parse_input after text changes
+            LRESULT res = DefSubclassProc(hEdit, msg, wParam, lParam);
+            updateInput();
+            return res;
+        }
+		if (wParam == VK_TAB) {
 			if (self->sel_ == -1) {
 				self->processListviewNavigation(+1);
 			}
 			self->autofill_input_by_selection();
 			return 0;
 		}
-		else if (wParam == VK_DOWN || (wParam == L'N' && (GetKeyState(VK_CONTROL) & 0x8000))) {
+		if (wParam == VK_DOWN || (wParam == L'N' && (GetKeyState(VK_CONTROL) & 0x8000))) {
 			//int n = (int)SendMessageW(self->listbox_, LB_GETCOUNT, 0, 0);
 			//if (n == 0) return 0;
 			//self->sel_ = (self->sel_ + 1) % n;
@@ -795,7 +805,7 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
             self->processListviewNavigation(+1);
             return 0;
         }
-        else if (wParam == VK_UP || (wParam == L'P' && (GetKeyState(VK_CONTROL) & 0x8000))) {
+        if (wParam == VK_UP || (wParam == L'P' && (GetKeyState(VK_CONTROL) & 0x8000))) {
             self->processListviewNavigation(-1);
             return 0;
         }
@@ -839,12 +849,20 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
         else if (wParam == VK_F2 || wParam == VK_APPS) {
             return self->processContextMenu();
         }
-        else if (wParam == VK_ESCAPE) {
+        else if (wParam == VK_ESCAPE ) {
             self->show(false);
             SetWindowTextW(hEdit, L"");
             return 0;
         }
         break;
+    case WM_PASTE:
+    case WM_CUT: // Handle paste/cut from context menu, etc.
+    {
+        LRESULT res = DefSubclassProc(hEdit, msg, wParam, lParam);
+        updateInput();
+        return res;
+    }
+    break;
     case WM_SYSKEYDOWN:
         if (wParam == VK_BACK && (GetKeyState(VK_MENU) & 0x8000)) {
             return self->processAltBackspace();
@@ -896,12 +914,18 @@ LRESULT MainWindow::processContextMenu(WPARAM wParam, LPARAM lParam) {
             if (mode_ == Mode::FileBrowser) {
                 hittedItem = browser_.results()[iItem].fullpath;
             }
+            else if (mode_ == Mode::Bookmarks) {
+                hittedItem = bookmarks_.all()[iItem];
+            }
+            else if (mode_ == Mode::History) {
+                hittedItem = history_.all()[iItem];
+            }
 			GuiHelper::ShowShellContextMenu(hwnd_, hListview_, hittedItem, x, y);
         }
         return 0;
 }
 LRESULT MainWindow::processWMCommand(WPARAM wParam) {
-    if (LOWORD(wParam) == 2) {
+    if (LOWORD(wParam) == LISTVIEW_ID) {
         // list
         if (HIWORD(wParam) == LBN_DBLCLK) {
             // double click in listbox is same as Enter
@@ -914,7 +938,7 @@ LRESULT MainWindow::processWMCommand(WPARAM wParam) {
 			sel_ = (int)SendMessageW(listbox_, LB_GETCURSEL, 0, 0);
         }
     }
-    else if (LOWORD(wParam) == 3 ) {// combo
+    else if (LOWORD(wParam) == COMBO_ID ) {// combo
         if (HIWORD(wParam) == CBN_SELCHANGE) {
 			int sel = (int)SendMessageW(combo_mode_, CB_GETCURSEL, 0, 0);
             mode_ = static_cast<Mode>(sel);
@@ -928,12 +952,14 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 	if (!self) return DefWindowProcW(hwnd, msg, wParam, lParam);
 	switch (msg) {
         case WM_CREATE:{
-            gEditBrush = CreateSolidBrush(RGB(102, 205, 170));
+            gEditBrush = CreateSolidBrush(EDIT_BK_COLOR);
             CoInitialize(NULL); // Must call this to use shell COM interfaces!
             self->hListview_ = CreateWindowW(WC_LISTVIEWW, L"",
                                        WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_OWNERDATA | LVS_SINGLESEL | LVS_NOCOLUMNHEADER | LVS_SHOWSELALWAYS,
                                        PADDING, PADDING + EDIT_H + CONTROL_MARGIN, 0, 0,
-                                       hwnd, (HMENU)2, GetModuleHandle(nullptr), nullptr);
+                                       hwnd, (HMENU)LISTVIEW_ID, GetModuleHandle(nullptr), nullptr);
+            ListView_SetBkColor(self->hListview_, LISTVIEW_BK_COLOR);
+            ListView_SetTextBkColor(self->hListview_, LISTVIEW_BK_COLOR);
             LVCOLUMNW col = { 0 };
             col.mask = LVCF_TEXT | LVCF_WIDTH;
             col.pszText = (LPWSTR)L"";
@@ -960,9 +986,8 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         if ((HWND)lParam == self->edit_) {
 			//return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
             HDC hdcEdit = (HDC)wParam;
-            SetBkMode(hdcEdit, OPAQUE);
-            SetBkColor(hdcEdit, RGB(144, 238, 144));
-            //SetTextColor(hdcEdit, RGB(0, 0, 0));
+            //SetBkMode(hdcEdit, OPAQUE);
+            SetBkColor(hdcEdit, EDIT_BK_COLOR);
             return (LRESULT)gEditBrush;
         }
         else {
@@ -1032,6 +1057,63 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             self->update_spinner();
         }
 		return 0;
+    case WM_DRAWITEM: {
+        LPDRAWITEMSTRUCT pdis = (LPDRAWITEMSTRUCT)lParam;
+        if (pdis->CtlID == COMBO_ID && pdis->itemID >= 0) {
+            // === Modern colors/font ===
+            COLORREF clrBg = (pdis->itemState & ODS_SELECTED) ? RGB(230, 240, 255) : RGB(255, 255, 255); // blue highlight if selected
+            COLORREF clrText = (pdis->itemState & ODS_SELECTED) ? RGB(0, 60, 150) : RGB(40, 40, 40);
+            HBRUSH hBrush = CreateSolidBrush(clrBg);
+            FillRect(pdis->hDC, &pdis->rcItem, hBrush);
+            DeleteObject(hBrush);
+
+            // Fetch item text
+            wchar_t szText[128] = { 0 };
+            SendMessageW(pdis->hwndItem, CB_GETLBTEXT, pdis->itemID, (LPARAM)szText);
+
+            // Optional: Draw icon (simple colored circle for demo)
+            int iconMargin = 7, iconR = 7;
+            int cy = (pdis->rcItem.bottom - pdis->rcItem.top) / 2;
+            int cx = pdis->rcItem.left + iconMargin + iconR;
+            HBRUSH hIconBrush = CreateSolidBrush(RGB(80, 150, 255));
+            SelectObject(pdis->hDC, hIconBrush);
+            Ellipse(pdis->hDC, pdis->rcItem.left + iconMargin, pdis->rcItem.top + cy - iconR / 2, pdis->rcItem.left + iconMargin + iconR, pdis->rcItem.top + cy + iconR / 2);
+            DeleteObject(hIconBrush);
+
+            // Draw text (Segoe UI if available)
+            HFONT hFont = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+            HFONT hOldFont = (HFONT)SelectObject(pdis->hDC, hFont);
+
+            RECT rcText = pdis->rcItem;
+            rcText.left += iconMargin + iconR + 8; // offset after icon
+            SetTextColor(pdis->hDC, clrText);
+            SetBkMode(pdis->hDC, TRANSPARENT);
+            DrawTextW(pdis->hDC, szText, -1, &rcText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+            SelectObject(pdis->hDC, hOldFont);
+            DeleteObject(hFont);
+
+            // Optional: Draw flat border for drop-down
+            if (pdis->itemAction == ODA_FOCUS) {
+                RECT rc = pdis->rcItem;
+                rc.left += 1; rc.top += 1;
+                rc.right -= 1; rc.bottom -= 1;
+                FrameRect(pdis->hDC, &rc, (HBRUSH)GetStockObject(GRAY_BRUSH));
+            }
+            return TRUE;
+        }
+        break;
+    }
+    //case WM_MEASUREITEM: { // replace by SendMessage(hCombo, CB_SETITEMHEIGHT, 0, 24);
+    //    LPMEASUREITEMSTRUCT pmis = (LPMEASUREITEMSTRUCT)lParam;
+    //    if (pmis->CtlID == COMBO_ID) {
+    //        pmis->itemHeight = 24;
+    //        return TRUE;
+    //    }
+    //    break;
+    //}
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
@@ -1076,11 +1158,16 @@ LRESULT CALLBACK MainWindow::ListviewProc(HWND hListview, UINT msg, WPARAM wPara
         else if (wParam == VK_BACK ) {
             return self->processBackspace();
         }
-        else if (wParam == VK_ESCAPE) {
+        else if (wParam == VK_ESCAPE ) {
             self->show(false);
             return 0;
         }
 
     }
     return DefSubclassProc(hListview, msg, wParam, lParam);
+}
+
+LRESULT CALLBACK MainWindow::FlatComboSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR)
+{
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
 }

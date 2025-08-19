@@ -47,7 +47,7 @@ void invoke_folder_verb(HWND hwnd, const std::wstring& folder_path, LPCWSTR wver
     }
 }
 
-void GuiHelper::openFolder(HWND hwndParent, std::wstring& folder_path){
+void GuiHelper::openFolder(HWND hwndParent, const std::wstring& folder_path){
     bool qttab = true;
     // todo
     if (qttab)

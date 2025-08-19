@@ -1,19 +1,22 @@
 * DONE fuzzy search improve: multiple word
 * TODO default select first one. if no one is mathed, call shellexecute (the case when sel_ == -1)
-* TODO 回车应该是打开，而不是autofill
+* DONE 回车应该是打开，而不是autofill
 * TODO setting:
 exclude list
 * TODO command listview
 * TODO bookmark listview
 * TODO quickly switching mode
 * Edit
-** TODO ctrl a
+** DONE ctrl a
 ** DONE ctrl / undo delete word
+** DONE ctrl v , parse input
 * Listview
 ** TODO goto first/last
 ** DONE filebrowser switch to history, listview doesn't get updated
 ** TODO dbclick
 ** TODO file explorer
+** TODO only show file/folder/*.ext
+** TODO sort by date desc?
 * TODO command/history save to sqlite?
 * TODO open file path in history/bookmark mode
 

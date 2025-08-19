@@ -2,9 +2,17 @@
 #include <Windows.h>
 #include <gdiplus.h>
 #include <string>
+
+//0xF0F4FD  light blue (bg)
+//0x3370FF  blue(text)
+//0xEDFBF3  light green
+// 0x039855 green
+
+#define HEXTOCOLORREF(x) RGB(((x) >> 16) & 0xFF, ((x) >> 8) & 0xFF, (x) & 0xFF)
+
 class GuiHelper {
 public:
-    static void openFolder(HWND hwndParent, std::wstring& folder_path);
+    static void openFolder(HWND hwndParent,const std::wstring& folder_path);
     static void ShowShellContextMenu(HWND hwndParent, HWND hListView, std::wstring& path, int x, int y);
     static void SetWindowRoundRgn(HWND hwnd, int width, int height, int radius);
 
