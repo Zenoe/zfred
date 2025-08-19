@@ -1,5 +1,7 @@
 * DONE fuzzy search improve: multiple word
 * TODO default select first one. if no one is mathed, call shellexecute (the case when sel_ == -1)
+* TODO highlight chars matched to searching text
+* TODO clipboard
 * DONE 回车应该是打开，而不是autofill
 * TODO setting:
 exclude list
@@ -18,7 +20,7 @@ exclude list
 ** TODO only show file/folder/*.ext
 ** TODO sort by date desc?
 * TODO command/history save to sqlite?
-* TODO open file path in history/bookmark mode
+* DONE open file path in history/bookmark mode
 
 
 
@@ -35,3 +37,6 @@ F2 or Menu Key: File actions menu (open, open folder, delete, rename, copy, (un)
 
 Arrow keys/Tab/Enter: Navigate, accept
 Double-click: Same as Enter
+
+
+* vcpkg install sqlite3

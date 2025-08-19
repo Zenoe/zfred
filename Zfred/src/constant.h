@@ -11,7 +11,7 @@ constexpr int PADDING = 8;
 constexpr int EDIT_W = 560;
 constexpr int EDIT_H = 24; // to level with the default height of combox, (alos adjust the font size of the text to be 22)
 constexpr int COMBO_W = 128;
-constexpr int COMBO_H = 320;  // unused, it seems the height is set by default(28)
+//constexpr int COMBO_H = 320;  // unused, it seems the height is set by default(28)
 
 constexpr int CONTROL_MARGIN = 1;
 

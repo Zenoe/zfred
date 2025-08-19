@@ -1,5 +1,6 @@
 // string_util.h
 #pragma once
+#include <Windows.h>
 #include <string>
 #include <cwctype>
 #include <cctype>
@@ -75,5 +76,23 @@ namespace string_util {
             i = j;
         }
         return result;
+    }
+
+    // Convert UTF-16 (wstring) to UTF-8 (string)
+    inline std::string wstring_to_utf8(const std::wstring& wstr) {
+        if (wstr.empty()) return {};
+        int sz = WideCharToMultiByte(CP_UTF8, 0, wstr.data(), (int)wstr.size(), nullptr, 0, nullptr, nullptr);
+        std::string str(sz, 0);
+        WideCharToMultiByte(CP_UTF8, 0, wstr.data(), (int)wstr.size(), &str[0], sz, nullptr, nullptr);
+        return str;
+    }
+
+    // Convert UTF-8 (string) to UTF-16 (wstring)
+    inline std::wstring utf8_to_wstring(const std::string& str) {
+        if (str.empty()) return {};
+        int sz = MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), nullptr, 0);
+        std::wstring wstr(sz, 0);
+        MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), &wstr[0], sz);
+        return wstr;
     }
 } // namespace string_util

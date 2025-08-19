@@ -1,10 +1,12 @@
 ﻿#include "mainwindow.h"
 #include <commctrl.h>
+#include "utils/dbsqlite.h"
 
 //#include <gdiplus.h>
 //using namespace Gdiplus;
 //ULONG_PTR gdiplusToken;
 
+// To make a ComboBox control appear flat. Using Visual Styles
 #pragma comment(linker, "\"/manifestdependency:type='win32' \
 name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
 processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
@@ -36,7 +38,11 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
     //GdiplusStartupInput gdiplusStartupInput;
     //GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
-    MainWindow app(hInstance);
+    Database db(L"clipboard.db");
+    MainWindow app(hInstance, &db);
+    //ClipboardManager clip(app.GetHwnd(), &db);
+    //clip.Start();
+
     if (!app.create())
         return 1;
     app.show(true); // Start hidden
@@ -46,6 +52,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
     //FreeConsole();
 #endif // _DEBUG
     //GdiplusShutdown(gdiplusToken);
+    //clip.Stop();
     return 0;
 }
 //int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {

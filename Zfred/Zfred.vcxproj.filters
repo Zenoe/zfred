@@ -61,6 +61,18 @@
     <ClInclude Include="src\utils\ahocorasick.h">
       <Filter>src\utils</Filter>
     </ClInclude>
+    <ClInclude Include="src\utils\dbsqlite.h">
+      <Filter>src\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="src\clipboard.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\settingdlg.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\resource.h">
+      <Filter>资源文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\bookmarks.cpp">
@@ -99,8 +111,25 @@
     <ClCompile Include="src\utils\simpleundo.cpp">
       <Filter>src\utils</Filter>
     </ClCompile>
+    <ClCompile Include="src\utils\dbsqlite.cpp">
+      <Filter>src\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="src\clipboard.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\settingdlg.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\3rd\shell.c">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="note.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\resource.rc">
+      <Filter>资源文件</Filter>
+    </ResourceCompile>
   </ItemGroup>
 </Project>

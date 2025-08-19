@@ -1,0 +1,8 @@
+#ifndef RESOURCE_H
+#define RESOURCE_H
+
+#define IDM_SETTINGS 101
+#define IDD_SETTINGS 201
+#define IDC_ITEMLIMIT 301
+
+#endif // RESOURCE_H

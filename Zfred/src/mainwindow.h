@@ -6,28 +6,33 @@
 #include "history.h"
 #include "bookmarks.h"
 #include "utils/simpleundo.h"
+#include "utils/dbsqlite.h"
+
 
 #define WM_HISTORY_LOADED (WM_USER + 101)
 #define WM_DEBOUNCED_UPDATE_LIST (WM_USER + 102)
 #define SPINNER_TIMER_ID 1001
 
-enum class Mode { History, FileBrowser, Bookmarks, Count };
+enum class Mode { History, FileBrowser, Bookmarks, Clipboard, Count };
 inline const wchar_t* ModeToString(Mode mode) {
-    switch (mode) {
-    case Mode::FileBrowser:  return L"FileBrowser";
-    case Mode::History:      return L"History";
-    case Mode::Bookmarks:    return L"Bookmarks";
-    default:                 return L"Unknown";
-    }
+	switch (mode) {
+	case Mode::FileBrowser:  return L"FileBrowser";
+	case Mode::History:      return L"History";
+	case Mode::Bookmarks:    return L"Bookmarks";
+	case Mode::Clipboard:    return L"Clipboard";
+	default:                 return L"Unknown";
+	}
 }
 class MainWindow {
 public:
-    MainWindow(HINSTANCE hInstance);
+    MainWindow(HINSTANCE hInstance, Database* db);
     bool create();
     void show(bool visible);
     void run();
+    HWND GetHwnd() const { return hwnd_; }
 
 private:
+    Database* db_;
     HINSTANCE hInstance_;
     HWND hwnd_, edit_, listbox_, combo_mode_;
     HWND hListview_ = nullptr;
@@ -83,6 +88,9 @@ private:
     // the context just likt the explorer's
     LRESULT processContextMenu(WPARAM wParam, LPARAM lParam);
     LRESULT processWMCommand(WPARAM wpParam);
+    LRESULT processDrawItem(LPARAM lParam);
+    LRESULT processHotkey(WPARAM wParam);
+
     void processReturn();
     LRESULT undo_delete_word();
 

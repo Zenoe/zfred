@@ -24,14 +24,13 @@
 
 #define FLAT_BORDER_SUBCLASS_ID 1001
 
-//const COLORREF EDIT_BK_COLOR = RGB(144, 238, 144);
 const COLORREF EDIT_BK_COLOR = HEXTOCOLORREF(0xEDFBF3);
 const COLORREF LISTVIEW_BK_COLOR = RGB(247, 248, 250);
 HBRUSH gEditBrush = nullptr;
 
 MainWindow* MainWindow::self = nullptr;
-MainWindow::MainWindow(HINSTANCE hInstance)
-    : hInstance_(hInstance), hwnd_(nullptr), edit_(nullptr), listbox_(nullptr), combo_mode_(nullptr),
+MainWindow::MainWindow(HINSTANCE hInstance, Database* db)
+    : hInstance_(hInstance), db_(db), hwnd_(nullptr), edit_(nullptr), listbox_(nullptr), combo_mode_(nullptr),
     mode_(Mode::History), sel_(-1), show_hidden_(false), last_input_(L"")
 {
     self = this;
@@ -148,12 +147,14 @@ void MainWindow::run() {
     RegisterHotKey(hwnd_, 1, MOD_ALT, VK_SPACE);
 #endif // DEBUG
 
+    RegisterHotKey(hwnd_, 2,  MOD_CONTROL| MOD_ALT, 'B');
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
     UnregisterHotKey(hwnd_, 1);
+    UnregisterHotKey(hwnd_, 2);
 }
 
 void MainWindow::save_all() {
@@ -194,23 +195,28 @@ void MainWindow::update_listview() {
                 // don't run when it's not history mode
 				return;
 			}
-			ListView_SetItemCountEx(this->hListview_, this->history_.size(), LVSICF_NOINVALIDATEALL);
+			ListView_SetItemCountEx(hListview_, history_.size(), LVSICF_NOINVALIDATEALL);
             updateUICachePage(0);
 			// Force update visible rows
-			InvalidateRect(this->hListview_, NULL, TRUE);
-			UpdateWindow(this->hListview_);
+			InvalidateRect(hListview_, NULL, TRUE);
+			UpdateWindow(hListview_);
 			});
 	}
 	else if (mode_ == Mode::FileBrowser) {
-		ListView_SetItemCountEx(this->hListview_, browser_.results().size(), LVSICF_NOINVALIDATEALL);
+		ListView_SetItemCountEx(hListview_, browser_.results().size(), LVSICF_NOINVALIDATEALL);
 		// Force update visible rows
-		InvalidateRect(this->hListview_, NULL, TRUE);
-		UpdateWindow(this->hListview_);
+		InvalidateRect(hListview_, NULL, TRUE);
+		UpdateWindow(hListview_);
 	}else if(mode_ == Mode::Bookmarks){
-		ListView_SetItemCountEx(this->hListview_, bookmarks_.all().size(), LVSICF_NOINVALIDATEALL);
+		ListView_SetItemCountEx(hListview_, bookmarks_.all().size(), LVSICF_NOINVALIDATEALL);
 		// Force update visible rows
-		InvalidateRect(this->hListview_, NULL, TRUE);
-		UpdateWindow(this->hListview_);
+		InvalidateRect(hListview_, NULL, TRUE);
+		UpdateWindow(hListview_);
+    }
+    else if(mode_ == Mode::Clipboard) {
+        ListView_SetItemCountEx(hListview_, db_->getItemCount(), LVSICF_NOINVALIDATEALL);
+        InvalidateRect(hListview_, NULL, TRUE);
+        UpdateWindow(hListview_);
     }
 	sel_ = -1;
 	//if (sel_ >= 0){
@@ -473,8 +479,6 @@ void MainWindow:: autofill_input_by_selection() {
         }
     }
 }
-
-// Popup file actions menu for browser/bookmarks/history
 void MainWindow::file_actions_menu(const std::wstring& path) {
     HMENU hMenu = CreatePopupMenu();
     AppendMenuW(hMenu, MF_STRING, 1, L"Open");
@@ -543,8 +547,6 @@ LRESULT MainWindow::processAltBackspace() {
     update_listview();
 	return 0;
 }
-
-// Call this inside your subclass proc when you want to handle VK_BACK.
 void CustomBackspaceEdit(HWND hwnd)
 {
     // 1. Get selection
@@ -697,8 +699,6 @@ void MainWindow::processListViewContent(LPARAM lParam) {
 			//}
 	}
 	else if (mode_ == Mode::FileBrowser) {
-		NMLVDISPINFOW* plvdi = (NMLVDISPINFOW*)lParam;
-		int iItem = plvdi->item.iItem;
         const auto& results = browser_.results();
         if (iItem < static_cast<int>(results.size())) {
             const FileEntry& entry = results[iItem];
@@ -711,6 +711,25 @@ void MainWindow::processListViewContent(LPARAM lParam) {
             const std::wstring& entry = bookmarks[iItem];
             set_item_label(plvdi, entry);
         }
+    }
+    else if (mode_ == Mode::Clipboard) {
+        //ListView_DeleteAllItems(hListview_);
+        auto items = db_->getRecentItems(100);
+        if (iItem < items.size()) {
+			set_item_label(plvdi, items[iItem].content);
+        }
+        //LVITEM lvi = { 0 };
+        //for (size_t i = 0; i < items.size(); ++i) {
+        //    lvi.mask = LVIF_TEXT;
+        //    lvi.iItem = i;
+        //    lvi.iSubItem = 0;
+        //    lvi.pszText = const_cast<wchar_t*>(std::wstring(items[i].content.begin(), items[i].content.end()).c_str());
+        //    ListView_InsertItem(hListview_, &lvi);
+
+        //    lvi.iSubItem = 1;
+        //    lvi.pszText = const_cast<wchar_t*>(std::wstring(items[i].timestamp.begin(), items[i].timestamp.end()).c_str());
+        //    ListView_SetItemText(hListview_, i, 1, lvi.pszText);
+        //}
     }
 }
 
@@ -754,6 +773,8 @@ LRESULT MainWindow::switchMode(WPARAM wParam) {
         mode_ = Mode::History;
     else if (wParam == 0x32)
         mode_ = Mode::Bookmarks;
+    //else if (wParam == VK_F2)
+    //    mode_ = Mode::Clipboard;
     else
         return 0;
 	SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
@@ -815,7 +836,7 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
         else if (wParam == VK_OEM_2 && (GetKeyState(VK_CONTROL) & 0x8000)) {  // ctrl /
             return self->undo_delete_word();
         }
-        else if ((wParam == 0x31 || wParam == 0x32 ) && (GetKeyState(VK_CONTROL) & 0x8000)) {
+        else if ((wParam == 0x31 || wParam == 0x32 || wParam == VK_F2) && (GetKeyState(VK_CONTROL) & 0x8000)) {
             return self->switchMode(wParam);
         }
         
@@ -948,10 +969,116 @@ LRESULT MainWindow::processWMCommand(WPARAM wParam) {
 	}
 	return 0;
 }
+LRESULT MainWindow::processDrawItem(LPARAM lParam) {
+    LPDRAWITEMSTRUCT pdis = (LPDRAWITEMSTRUCT)lParam;
+    if (pdis->CtlID == COMBO_ID && pdis->itemID >= 0) {
+        // === Modern colors/font ===
+        COLORREF clrBg = (pdis->itemState & ODS_SELECTED) ? RGB(230, 240, 255) : RGB(255, 255, 255); // blue highlight if selected
+        COLORREF clrText = (pdis->itemState & ODS_SELECTED) ? RGB(0, 60, 150) : RGB(40, 40, 40);
+        HBRUSH hBrush = CreateSolidBrush(clrBg);
+        FillRect(pdis->hDC, &pdis->rcItem, hBrush);
+        DeleteObject(hBrush);
+
+        // Fetch item text
+        wchar_t szText[128] = { 0 };
+        SendMessageW(pdis->hwndItem, CB_GETLBTEXT, pdis->itemID, (LPARAM)szText);
+
+        int iconMargin = 4, iconSize = 16;
+        RECT rcIcon{ pdis->rcItem.left + iconMargin, pdis->rcItem.top + (pdis->rcItem.bottom - pdis->rcItem.top - iconSize) / 2,
+                    pdis->rcItem.left + iconMargin + iconSize, pdis->rcItem.top + (pdis->rcItem.bottom - pdis->rcItem.top + iconSize) / 2 };
+
+        // Pick icon by string
+        if (wcscmp(szText, L"History") == 0) {
+            // Draw a clock face
+            Ellipse(pdis->hDC, rcIcon.left, rcIcon.top, rcIcon.right, rcIcon.bottom);
+            MoveToEx(pdis->hDC, rcIcon.left + iconSize / 2, rcIcon.top + iconSize / 2, nullptr); // center
+            LineTo(pdis->hDC, rcIcon.left + iconSize / 2, rcIcon.top + 4); // hour
+            MoveToEx(pdis->hDC, rcIcon.left + iconSize / 2, rcIcon.top + iconSize / 2, nullptr);
+            LineTo(pdis->hDC, rcIcon.left + iconSize - 4, rcIcon.top + iconSize / 2); // minute
+        }
+        else if (wcscmp(szText, L"FileBrowser") == 0) {
+            // Draw a folder
+            HBRUSH yBrush = CreateSolidBrush(RGB(255, 215, 80));
+            RECT folder = rcIcon; folder.top += 4; folder.left += 2; folder.right -= 2; folder.bottom -= 2;
+            FillRect(pdis->hDC, &folder, yBrush);
+            DeleteObject(yBrush);
+            MoveToEx(pdis->hDC, rcIcon.left, rcIcon.top + 5, nullptr);
+            LineTo(pdis->hDC, rcIcon.right, rcIcon.top + 5); // folder top
+            MoveToEx(pdis->hDC, rcIcon.left + 4, rcIcon.top, nullptr);
+            LineTo(pdis->hDC, rcIcon.left + 7, rcIcon.top + 5); // folder tab
+            DeleteObject(yBrush);
+        }
+        else if (wcscmp(szText, L"Bookmarks") == 0) {
+            // Draw a bookmark (flag)
+            HBRUSH rBrush = CreateSolidBrush(RGB(220, 64, 90));
+            RECT flag = { rcIcon.left + 4, rcIcon.top + 2, rcIcon.left + 10, rcIcon.bottom - 4 };
+            FillRect(pdis->hDC, &flag, rBrush);
+            POINT tri[3] = { {rcIcon.left + 4, rcIcon.bottom - 4}, {rcIcon.left + 10, rcIcon.bottom - 4}, {rcIcon.left + 7, rcIcon.bottom - 1} };
+            HBRUSH bBrush = CreateSolidBrush(RGB(90, 64, 220));
+            SelectObject(pdis->hDC, bBrush);
+            Polygon(pdis->hDC, tri, 3);
+            DeleteObject(bBrush);
+            DeleteObject(rBrush);
+        }
+        else if (wcscmp(szText, L"Clipboard") == 0) {
+            // Draw a clipboard
+            HBRUSH bBrush = CreateSolidBrush(RGB(180, 200, 255));
+            RECT pad = rcIcon; pad.top += 3; pad.left += 4; pad.right -= 4; pad.bottom -= 2;
+            FillRect(pdis->hDC, &pad, bBrush);
+            DeleteObject(bBrush);
+            Rectangle(pdis->hDC, rcIcon.left + 4, rcIcon.top + 1, rcIcon.right - 4, rcIcon.top + 5); // clip head
+        }
+        else {
+            // default: draw colored dot
+            HBRUSH hIconBrush = CreateSolidBrush(RGB(80, 150, 255));
+            SelectObject(pdis->hDC, hIconBrush);
+            Ellipse(pdis->hDC, rcIcon.left, rcIcon.top, rcIcon.right, rcIcon.bottom);
+            DeleteObject(hIconBrush);
+        }
+
+        // Draw text (Segoe UI if available)
+        HFONT hFont = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+            DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        HFONT hOldFont = (HFONT)SelectObject(pdis->hDC, hFont);
+
+        RECT rcText = pdis->rcItem;
+        rcText.left += iconMargin + iconMargin + iconSize; // offset after icon
+        SetTextColor(pdis->hDC, clrText);
+        SetBkMode(pdis->hDC, TRANSPARENT);
+        DrawTextW(pdis->hDC, szText, -1, &rcText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+        SelectObject(pdis->hDC, hOldFont);
+        DeleteObject(hFont);
+
+        // Draw flat border for drop-down
+        //if (pdis->itemAction == ODA_FOCUS) {
+        //    RECT rc = pdis->rcItem;
+        //    rc.left += 1; rc.top += 1;
+        //    rc.right -= 1; rc.bottom -= 1;
+        //    FrameRect(pdis->hDC, &rc, (HBRUSH)GetStockObject(GRAY_BRUSH));
+        //}
+    }
+    return 0;
+}
+
+LRESULT MainWindow::processHotkey(WPARAM wParam) {
+        if (wParam == 1)
+            show(!IsWindowVisible(hwnd_));
+        else if (wParam == 2) {
+            show(true);
+            mode_ = Mode::Clipboard;
+            SendMessageW(combo_mode_, CB_SETCURSEL, (WPARAM)mode_, 0);
+            update_listview();
+            SetFocus(edit_);
+        }
+        return 0;
+}
 LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	if (!self) return DefWindowProcW(hwnd, msg, wParam, lParam);
 	switch (msg) {
         case WM_CREATE:{
+            AddClipboardFormatListener(hwnd);
             gEditBrush = CreateSolidBrush(EDIT_BK_COLOR);
             CoInitialize(NULL); // Must call this to use shell COM interfaces!
             self->hListview_ = CreateWindowW(WC_LISTVIEWW, L"",
@@ -969,8 +1096,7 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 			break;
         }
     case WM_HOTKEY:
-        if (wParam == 1)
-            self->show(!IsWindowVisible(hwnd));
+        self->processHotkey(wParam);
         return 0;
     case WM_COMMAND:
         return self->processWMCommand(wParam);
@@ -1000,7 +1126,23 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         // else: default color for other edits
         //return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
     }
+    case WM_CLIPBOARDUPDATE:
+        if (OpenClipboard(hwnd)) {
+            HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+            if (hData) {
+                wchar_t* pszText = static_cast<wchar_t*>(GlobalLock(hData));
+                if (pszText) {
+                    std::wstring strText(pszText);
+                    GlobalUnlock(hData);
+                    self->db_->addItem(strText);
+                    self->update_listview();
+                }
+            }
+            CloseClipboard();
+        }
+        break;
     case WM_DESTROY:
+        RemoveClipboardFormatListener(hwnd);
         self->save_all();
         CoUninitialize();
         DeleteObject(gEditBrush);
@@ -1058,53 +1200,7 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         }
 		return 0;
     case WM_DRAWITEM: {
-        LPDRAWITEMSTRUCT pdis = (LPDRAWITEMSTRUCT)lParam;
-        if (pdis->CtlID == COMBO_ID && pdis->itemID >= 0) {
-            // === Modern colors/font ===
-            COLORREF clrBg = (pdis->itemState & ODS_SELECTED) ? RGB(230, 240, 255) : RGB(255, 255, 255); // blue highlight if selected
-            COLORREF clrText = (pdis->itemState & ODS_SELECTED) ? RGB(0, 60, 150) : RGB(40, 40, 40);
-            HBRUSH hBrush = CreateSolidBrush(clrBg);
-            FillRect(pdis->hDC, &pdis->rcItem, hBrush);
-            DeleteObject(hBrush);
-
-            // Fetch item text
-            wchar_t szText[128] = { 0 };
-            SendMessageW(pdis->hwndItem, CB_GETLBTEXT, pdis->itemID, (LPARAM)szText);
-
-            // Optional: Draw icon (simple colored circle for demo)
-            int iconMargin = 7, iconR = 7;
-            int cy = (pdis->rcItem.bottom - pdis->rcItem.top) / 2;
-            int cx = pdis->rcItem.left + iconMargin + iconR;
-            HBRUSH hIconBrush = CreateSolidBrush(RGB(80, 150, 255));
-            SelectObject(pdis->hDC, hIconBrush);
-            Ellipse(pdis->hDC, pdis->rcItem.left + iconMargin, pdis->rcItem.top + cy - iconR / 2, pdis->rcItem.left + iconMargin + iconR, pdis->rcItem.top + cy + iconR / 2);
-            DeleteObject(hIconBrush);
-
-            // Draw text (Segoe UI if available)
-            HFONT hFont = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-            HFONT hOldFont = (HFONT)SelectObject(pdis->hDC, hFont);
-
-            RECT rcText = pdis->rcItem;
-            rcText.left += iconMargin + iconR + 8; // offset after icon
-            SetTextColor(pdis->hDC, clrText);
-            SetBkMode(pdis->hDC, TRANSPARENT);
-            DrawTextW(pdis->hDC, szText, -1, &rcText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-
-            SelectObject(pdis->hDC, hOldFont);
-            DeleteObject(hFont);
-
-            // Optional: Draw flat border for drop-down
-            if (pdis->itemAction == ODA_FOCUS) {
-                RECT rc = pdis->rcItem;
-                rc.left += 1; rc.top += 1;
-                rc.right -= 1; rc.bottom -= 1;
-                FrameRect(pdis->hDC, &rc, (HBRUSH)GetStockObject(GRAY_BRUSH));
-            }
-            return TRUE;
-        }
-        break;
+        return self ->processDrawItem(lParam);
     }
     //case WM_MEASUREITEM: { // replace by SendMessage(hCombo, CB_SETITEMHEIGHT, 0, 24);
     //    LPMEASUREITEMSTRUCT pmis = (LPMEASUREITEMSTRUCT)lParam;
