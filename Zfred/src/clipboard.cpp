@@ -1,47 +1,66 @@
-#include "clipboard.h"
+﻿#include "clipboard.h"
 #include <atomic>
 #include <chrono>
 #include <string>
 #include <iostream>
+#include "utils/stringutil.h"
 
-ClipboardManager::ClipboardManager(HWND hwnd, Database* db) : hwnd_(hwnd), db_(db), running_(false) {}
-
-void ClipboardManager::Start() {
-    running_ = true;
-    thread_ = std::thread(&ClipboardManager::Monitor, this);
+Clipboard::Clipboard()  {
+    db_ = std::make_unique<Database<ClipItem>>(L"clipboard.sqlite");
+    allItems = db_->getRecord(L"clipboard_items", 0, clipItemSize);
+    filteredItems.reserve(allItems.size());
+    filteredItems.insert(filteredItems.end(), allItems.begin(), allItems.end());
 }
 
-void ClipboardManager::Stop() {
-    running_ = false;
-    if (thread_.joinable())
-        thread_.join();
+
+void Clipboard::add (std::wstring item){
+    db_->addItem(item);
 }
 
-void ClipboardManager::Monitor() {
-    AddClipboardFormatListener(hwnd_);
-    MSG msg;
-    while (running_) {
-        if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-            if (msg.message == WM_CLIPBOARDUPDATE) {// should be handle in UI thread. not work in this thread
-                if (OpenClipboard(hwnd_)) {
-                    HANDLE hData = GetClipboardData(CF_TEXT);
-                    if (hData) {
-                        wchar_t* pszText = static_cast<wchar_t*>(GlobalLock(hData));
-                        if (pszText) {
-                            std::wstring strText(pszText);
-                            GlobalUnlock(hData);
-                            db_->addItem(strText);
-                            PostMessage(hwnd_, WM_USER + 1, 0, 0); // Notify UI
-                        }
-                    }
-                    CloseClipboard();
-                }
-            } else {
-                TranslateMessage(&msg);
-                DispatchMessage(&msg);
-            }
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+int Clipboard::getCount(){
+    return db_->getItemCount();
+}
+
+
+std::vector<ClipItem> Clipboard::getItems(int start, int limit ) {
+    return filteredItems;
+}
+
+bool Clipboard::write(int idx){
+    if(idx < 0 || idx >= clipItemSize) return false;
+
+    const std::wstring& text= allItems[idx].content;
+    if (text.empty()) return false;
+
+    if (!OpenClipboard(nullptr)) return false;
+
+    EmptyClipboard();
+
+    // 分配全局内存（包含结尾的 L'\0'）
+    size_t data_size = (text.size() + 1) * sizeof(wchar_t);
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, data_size);
+    if (!hMem) {
+        CloseClipboard();
+        return false;
     }
-    RemoveClipboardFormatListener(hwnd_);
+
+    // 将内容拷贝到分配的内存
+    void* pMem = GlobalLock(hMem);
+    memcpy(pMem, text.c_str(), data_size);
+    GlobalUnlock(hMem);
+
+    // 设置剪贴板内容为 Unicode 文本
+    SetClipboardData(CF_UNICODETEXT, hMem);
+
+    // 剪贴板现在拥有数据的所有权，不需要手动 GlobalFree(hMem)
+    CloseClipboard();
+
+    return true;
+}
+
+void Clipboard::filter(const std::wstring& pat){
+    if(pat.empty()) return;
+    filteredItems.clear();
+    auto getContent = [](const ClipItem& d) -> std::wstring_view { return d.content; };
+    filteredItems = string_util::filterContainerWithPats(allItems, pat, getContent);
 }

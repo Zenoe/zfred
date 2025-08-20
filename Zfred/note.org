@@ -2,6 +2,9 @@
 * TODO default select first one. if no one is mathed, call shellexecute (the case when sel_ == -1)
 * TODO highlight chars matched to searching text
 * TODO clipboard
+** TODO activate
+** TODO
+**
 * DONE 回车应该是打开，而不是autofill
 * TODO setting:
 exclude list
@@ -20,6 +23,7 @@ exclude list
 ** TODO only show file/folder/*.ext
 ** TODO sort by date desc?
 * TODO command/history save to sqlite?
+* TODO grpc to browser files on other host
 * DONE open file path in history/bookmark mode
 
 

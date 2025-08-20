@@ -1,6 +1,5 @@
 ﻿#include "mainwindow.h"
 #include <commctrl.h>
-#include "utils/dbsqlite.h"
 
 //#include <gdiplus.h>
 //using namespace Gdiplus;
@@ -38,8 +37,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
     //GdiplusStartupInput gdiplusStartupInput;
     //GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
-    Database db(L"clipboard.db");
-    MainWindow app(hInstance, &db);
+    MainWindow app(hInstance);
     //ClipboardManager clip(app.GetHwnd(), &db);
     //clip.Start();
 

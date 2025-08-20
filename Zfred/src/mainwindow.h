@@ -6,8 +6,7 @@
 #include "history.h"
 #include "bookmarks.h"
 #include "utils/simpleundo.h"
-#include "utils/dbsqlite.h"
-
+#include "clipboard.h"
 
 #define WM_HISTORY_LOADED (WM_USER + 101)
 #define WM_DEBOUNCED_UPDATE_LIST (WM_USER + 102)
@@ -25,14 +24,13 @@ inline const wchar_t* ModeToString(Mode mode) {
 }
 class MainWindow {
 public:
-    MainWindow(HINSTANCE hInstance, Database* db);
+    MainWindow(HINSTANCE hInstance);
     bool create();
     void show(bool visible);
     void run();
     HWND GetHwnd() const { return hwnd_; }
 
 private:
-    Database* db_;
     HINSTANCE hInstance_;
     HWND hwnd_, edit_, listbox_, combo_mode_;
     HWND hListview_ = nullptr;
@@ -45,6 +43,7 @@ private:
     FileBrowser browser_;
     HistoryManager history_;
     BookmarkManager bookmarks_;
+    Clipboard clipboard_;
     
     SimpleUndo simpleundo_;
 
@@ -66,6 +65,7 @@ private:
     void activate_filebrowser(int idx);
     void activate_history(int idx);
     void activate_bookmarks(int idx);
+    void activate_clipboard(int idx);
 
     void file_actions_menu(const std::wstring& path);
     void autofill_input_by_selection();
@@ -74,6 +74,7 @@ private:
 
     void selectListview(int sel);
     LRESULT processAltBackspace();
+    LRESULT processChar(UINT msg,WPARAM wParam,  LPARAM lParam);
     LRESULT processBackspace();
     LRESULT processAppendHistory();
 

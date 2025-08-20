@@ -43,27 +43,29 @@ HistoryManager::HistoryManager(){
 				// 局部变量做筛选，避免反复加锁
 				std::deque<std::wstring> result;
 				auto t0 = std::chrono::steady_clock::now();
-				std::vector<std::wstring_view> pattern_views;
-				// split_by_space 参数是引用, pat是局部拷贝了一份成员变量，所以不会在split_by_space中途执行过程中被外面修改
-				std::vector<std::wstring> pats = string_util::split_by_space(pat);
-				pattern_views.reserve(pats.size());
-				for (const auto& s : pats)
-					pattern_views.push_back(s);
+				result = string_util::filterContainerWithPats(items_copy, pat);
 
-				// Build Aho-Corasick only ONCE. move it out of the for loop
-				AhoCorasick<wchar_t> ac;
-				ac.build(pattern_views);
+				//std::vector<std::wstring_view> pattern_views;
+				//// split_by_space 参数是引用, pat是局部拷贝了一份成员变量，所以不会在split_by_space中途执行过程中被外面修改
+				//std::vector<std::wstring> pats = string_util::split_by_space(pat);
+				//pattern_views.reserve(pats.size());
+				//for (const auto& s : pats)
+				//	pattern_views.push_back(s);
 
-				for (const auto& item : items_copy) {
-					std::wstring_view item_view(item);
+				//// Build Aho-Corasick only ONCE. move it out of the for loop
+				//AhoCorasick<wchar_t> ac;
+				//ac.build(pattern_views);
 
-					// Inline the check instead of building every time
-					std::vector<bool> found(pattern_views.size(), false);
-					ac.search(item_view, found);
-					if (std::all_of(found.begin(), found.end(), [](bool b) {return b; })) {
-						result.push_back(item);
-					}
-				}
+				//for (const auto& item : items_copy) {
+				//	std::wstring_view item_view(item);
+
+				//	// Inline the check instead of building every time
+				//	std::vector<bool> found(pattern_views.size(), false);
+				//	ac.search(item_view, found);
+				//	if (std::all_of(found.begin(), found.end(), [](bool b) {return b; })) {
+				//		result.push_back(item);
+				//	}
+				//}
 				auto t1 = std::chrono::steady_clock::now();
 
 				OutputDebugPrint("time const: ", std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());

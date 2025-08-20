@@ -1,17 +1,23 @@
 #pragma once
-#include <windows.h>
-#include <thread>
 #include "utils/dbsqlite.h"
+#include "constant.h"
 
-class ClipboardManager {
+struct ClipItem {
+    int id;
+    std::wstring content;
+    std::wstring timestamp;
+};
+
+class Clipboard {
 public:
-    ClipboardManager(HWND hwnd, Database* db);
-    void Start();
-    void Stop();
+    Clipboard();
+    void add(std::wstring item);
+    int getCount();
+    std::vector<ClipItem> getItems(int start = 0, int limit = clipItemSize);
+    bool write(int idx);
+    void filter(const std::wstring&);
 private:
-    HWND hwnd_;
-    Database* db_;
-    std::thread thread_;
-    bool running_;
-    void Monitor();
+    std::unique_ptr<Database<ClipItem>> db_;
+    std::vector<ClipItem> allItems;
+    std::vector<ClipItem> filteredItems;
 };

@@ -7,6 +7,11 @@
 #include <algorithm>
 #include <locale>
 #include <vector>
+#include "utils/ahocorasick.h"
+
+#include <functional>
+#include <algorithm>
+
 namespace string_util {
 
     // Helper for tolower, handles wchar_t and char
@@ -94,5 +99,52 @@ namespace string_util {
         std::wstring wstr(sz, 0);
         MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), &wstr[0], sz);
         return wstr;
+    }
+
+    // std::deque<std::wstring> filterVectorWithPats(
+    //     const std::deque<std::wstring>& items,
+    //     const std::wstring& pat
+    // );
+
+
+    template <
+        typename Container,
+        typename Extractor = std::function<std::wstring_view(const typename Container::value_type&)>
+    >
+    Container filterContainerWithPats(
+        const Container& items,
+        const std::wstring& pat,
+        Extractor extractor = [](const auto& item) -> std::wstring_view {
+            // Default: just return the string view if the value_type is std::wstring
+            if constexpr (std::is_same_v<std::decay_t<decltype(item)>, std::wstring>) {
+                return std::wstring_view(item);
+            }
+            else {
+                static_assert(sizeof(item) == 0,
+                    "Please provide a custom extractor for custom types!");
+            }
+        }
+    ) {
+        Container result;
+        std::vector<std::wstring> pats = string_util::split_by_space(pat);
+        std::vector<std::wstring_view> pattern_views;
+        pattern_views.reserve(pats.size());
+        for (const auto& s : pats)
+            pattern_views.emplace_back(s);
+
+        // Build Aho-Corasick ONCE
+        AhoCorasick<wchar_t> ac;
+        ac.build(pattern_views);
+
+        for (const auto& item : items) {
+            std::wstring_view item_view = extractor(item);
+            std::vector<bool> found(pattern_views.size(), false);
+            ac.search(item_view, found);
+            if (std::all_of(found.begin(), found.end(), [](bool b) { return b; })) {
+                result.push_back(item);
+            }
+        }
+
+        return result;
     }
 } // namespace string_util

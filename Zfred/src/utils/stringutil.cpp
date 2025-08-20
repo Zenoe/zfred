@@ -27,4 +27,32 @@ namespace string_util {
 
         return {s, deleted};
     }
+
+
+    // std::deque<std::wstring> filterVectorWithPats(
+    //     const std::deque<std::wstring>& items,
+    //     const std::wstring& pat
+    // ) {
+    //     std::deque<std::wstring> result;
+    //     std::vector<std::wstring> pats = string_util::split_by_space(pat);
+    //     std::vector<std::wstring_view> pattern_views;
+    //     pattern_views.reserve(pats.size());
+    //     for (const auto& s : pats)
+    //         pattern_views.emplace_back(s);
+
+    //     // Build Aho-Corasick ONCE
+    //     AhoCorasick<wchar_t> ac;
+    //     ac.build(pattern_views);
+
+    //     for (const auto& item : items) {
+    //         std::wstring_view item_view(item);
+    //         std::vector<bool> found(pattern_views.size(), false);
+    //         ac.search(item_view, found);
+    //         if (std::all_of(found.begin(), found.end(), [](bool b) { return b; })) {
+    //             result.push_back(item);
+    //         }
+    //     }
+
+    //     return result;
+    // }
 }

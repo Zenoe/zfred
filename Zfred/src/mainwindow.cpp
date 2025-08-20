@@ -29,8 +29,8 @@ const COLORREF LISTVIEW_BK_COLOR = RGB(247, 248, 250);
 HBRUSH gEditBrush = nullptr;
 
 MainWindow* MainWindow::self = nullptr;
-MainWindow::MainWindow(HINSTANCE hInstance, Database* db)
-    : hInstance_(hInstance), db_(db), hwnd_(nullptr), edit_(nullptr), listbox_(nullptr), combo_mode_(nullptr),
+MainWindow::MainWindow(HINSTANCE hInstance)
+    : hInstance_(hInstance), hwnd_(nullptr), edit_(nullptr), listbox_(nullptr), combo_mode_(nullptr),
     mode_(Mode::History), sel_(-1), show_hidden_(false), last_input_(L"")
 {
     self = this;
@@ -57,7 +57,8 @@ bool MainWindow::create() {
     RegisterClassExW(&wc);
 
     int x = (GetSystemMetrics(SM_CXSCREEN) - WND_W) / 2, y = 100;
-    LONG exStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED;
+    LONG exStyle =  WS_EX_TOOLWINDOW | WS_EX_LAYERED;
+    // LONG exStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED;
     // WS_EX_APPWINDOW Forces window to show in taskbar/Alt-Tab (useful with popup windows) 
     hwnd_ = CreateWindowExW(exStyle,
         wc.lpszClassName, L"zfred",
@@ -214,7 +215,8 @@ void MainWindow::update_listview() {
 		UpdateWindow(hListview_);
     }
     else if(mode_ == Mode::Clipboard) {
-        ListView_SetItemCountEx(hListview_, db_->getItemCount(), LVSICF_NOINVALIDATEALL);
+		clipboard_.filter(last_input_);
+        ListView_SetItemCountEx(hListview_, clipboard_.getCount(), LVSICF_NOINVALIDATEALL);
         InvalidateRect(hListview_, NULL, TRUE);
         UpdateWindow(hListview_);
     }
@@ -291,6 +293,7 @@ void MainWindow::update_listview() {
 //}
 
 void MainWindow::parse_input(const std::wstring& text) {
+    // todo move to update_listview() ?
     last_input_ = text;
     if(text.size() == 0){
         mode_ = Mode::History;
@@ -306,10 +309,6 @@ void MainWindow::parse_input(const std::wstring& text) {
             browser_.set_cwd(dir);
             browser_.update(pat, show_hidden_);
             SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
-        }
-        else if (mode_ == Mode::History) {
-            // todo
-            //history_.filter(text);
         }
         else {
             mode_ = Mode::History;
@@ -419,6 +418,9 @@ void MainWindow::activate_bookmarks(int idx) {
     }
 }
 
+void MainWindow::activate_clipboard(int idx){
+    clipboard_.write(idx);
+}
 void MainWindow:: autofill_input_by_selection() {
     if (sel_ < 0) return;  // no item in the listview
     std::wstring text;
@@ -714,7 +716,7 @@ void MainWindow::processListViewContent(LPARAM lParam) {
     }
     else if (mode_ == Mode::Clipboard) {
         //ListView_DeleteAllItems(hListview_);
-        auto items = db_->getRecentItems(100);
+        auto items = clipboard_.getItems();
         if (iItem < items.size()) {
 			set_item_label(plvdi, items[iItem].content);
         }
@@ -766,6 +768,7 @@ void MainWindow::processReturn() {
 	if (mode_ == Mode::FileBrowser) activate_filebrowser(sel_);
 	else if (mode_ == Mode::History) activate_history(sel_);
 	else if (mode_ == Mode::Bookmarks) activate_bookmarks(sel_);
+	else if (mode_ == Mode::Clipboard) activate_clipboard(sel_);
 }
 
 LRESULT MainWindow::switchMode(WPARAM wParam) {
@@ -783,19 +786,34 @@ LRESULT MainWindow::switchMode(WPARAM wParam) {
     return 0;
 }
 
+LRESULT MainWindow::processChar(UINT msg, WPARAM wParam, LPARAM lParam){
+    if (wParam == VK_BACK) { // '\b' == 8
+        return self->processBackspace();
+    }
+    LRESULT res = DefSubclassProc(edit_, msg, wParam, lParam);
+    // Allow only printable (`wParam >= 32`) to reach your parse logic
+    // You may also allow Enter (13), Tab (9), etc., as needed
+    if (wParam >= 32)
+        {
+            wchar_t buffer[512];
+            GetWindowTextW(edit_, buffer, 511);
+            self->parse_input(buffer);
+        }
+    return res;
+}
 LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR) {
-	if (!self) return DefSubclassProc(hEdit, msg, wParam, lParam);
+    if (!self) return DefSubclassProc(hEdit, msg, wParam, lParam);
     auto updateInput = [&]() {
         wchar_t buffer[512];
         GetWindowTextW(hEdit, buffer, 511);
         self->parse_input(buffer);
     };
-	switch (msg) {
-	case WM_KEYDOWN:
-		if (wParam == VK_RETURN) {
-			self->processReturn();
-			return 0;
-		}
+    switch (msg) {
+    case WM_KEYDOWN:
+        if (wParam == VK_RETURN) {
+            self->processReturn();
+            return 0;
+        }
         if ((wParam == 'A' || wParam == 'a') && (GetKeyState(VK_CONTROL) & 0x8000)) {
             SendMessage(hEdit, EM_SETSEL, 0, -1);
             return 0; // swallow the key
@@ -847,13 +865,14 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
         }
         else if ((wParam == L'B' || wParam == L'b') && (GetKeyState(VK_CONTROL) & 0x8000)) {
             // Ctrl+B: toggle bookmark on selection (only browser/history/bookmarks)
+            if (self->sel_ < 0) return 0;
             std::wstring path;
             if (self->mode_ == Mode::FileBrowser) {
                 auto e = self->browser_.selected();
                 if (e) path = e->fullpath;
             }
             else if (self->mode_ == Mode::History && self->sel_ < (int)self->history_.size()) {
-                path = self->history_.all()[self->sel_];
+                path = self->history_.all()[self->sel_];  
             }
             else if (self->mode_ == Mode::Bookmarks && self->sel_ < (int)self->bookmarks_.all().size()) {
                 path = self->bookmarks_.all()[self->sel_];
@@ -890,19 +909,7 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
         }
         break;
 	case WM_CHAR: {
-        if (wParam == VK_BACK) { // '\b' == 8
-			return self->processBackspace();
-        }
-		LRESULT res = DefSubclassProc(hEdit, msg, wParam, lParam);
-		// Allow only printable (`wParam >= 32`) to reach your parse logic
-		// You may also allow Enter (13), Tab (9), etc., as needed
-		if (wParam >= 32)
-		{
-			wchar_t buffer[512];
-			GetWindowTextW(hEdit, buffer, 511);
-			self->parse_input(buffer);
-		}
-		return res;
+        return self->processChar(msg, wParam, lParam);
 	}
     }
     return DefSubclassProc(hEdit, msg, wParam, lParam);
@@ -1134,7 +1141,7 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 if (pszText) {
                     std::wstring strText(pszText);
                     GlobalUnlock(hData);
-                    self->db_->addItem(strText);
+                    self->clipboard_.add(strText);
                     self->update_listview();
                 }
             }
@@ -1222,6 +1229,11 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         EndPaint(hwnd, &ps);
         break;
     }
+    case WM_ACTIVATE:
+        if (LOWORD(wParam) == WA_INACTIVE) {
+            self->show(false);
+        }
+        break;
     default:
         return DefWindowProcW(hwnd, msg, wParam, lParam);
     }
