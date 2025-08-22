@@ -9,12 +9,19 @@ Clipboard::Clipboard()  {
     db_ = std::make_unique<Database<ClipItem>>(L"clipboard.sqlite");
     allItems = db_->getRecord(L"clipboard_items", 0, clipItemSize);
     filteredItems.reserve(allItems.size());
-    filteredItems.insert(filteredItems.end(), allItems.begin(), allItems.end());
+    filteredItems.reserve(allItems.size());
+    for (const ClipItem& clip : allItems) {
+        std::vector<bool> mask;
+        filteredItems.emplace_back(clip, mask);
+    }
+    // error redirect to xmemeory
+    // DisplayClipItem::DisplayClipItem(const DisplayClipItem &)”: 无法将参数 1 从“ClipItem”转换为“const DisplayClipItem &”	Zfred	C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.32.31326\include\xmemory	680
+    // filteredItems.insert(filteredItems.end(), allItems.begin(), allItems.end());
 }
 
 
 void Clipboard::add (std::wstring item){
-    // db_->addItem(item);
+    db_->addItem(item);
 }
 
 size_t Clipboard::getCount(){
@@ -22,7 +29,7 @@ size_t Clipboard::getCount(){
 }
 
 
-const std::vector<ClipItem>& Clipboard::getItems(int start, int limit ) {
+const std::vector<DisplayClipItem>& Clipboard::getItems(int start, int limit ) {
     return filteredItems;
 }
 
@@ -58,6 +65,53 @@ bool Clipboard::write(int idx){
     return true;
 }
 
+std::vector<DisplayClipItem> filterContainerWithHighlights(const std::vector<ClipItem>& items, const std::wstring& pat)
+{
+    std::vector<DisplayClipItem> result;
+    std::vector<std::wstring> pats = string_util::split_by_space(pat);
+    std::vector<std::wstring_view> pattern_views;
+    pattern_views.reserve(pats.size());
+    for (const auto& s : pats)
+        pattern_views.emplace_back(s);
+
+    // Build Aho-Corasick ONCE
+    AhoCorasick<wchar_t> ac;
+    ac.build(pattern_views);
+
+    std::vector<bool> found(pattern_views.size(), false);
+
+    for (const auto& item : items) {
+        std::fill(found.begin(), found.end(), false);
+
+        std::wstring_view item_view = item.content;
+        // 1. Find which patterns are present
+        ac.search(item_view, found);
+
+        if (std::all_of(found.begin(), found.end(), [](bool b) { return b; })) {
+            // 2. Compute highlight_mask:
+            std::vector<bool> highlight_mask(item_view.size(), false);
+            // Find all pattern occurrences for this item
+            auto matches = ac.find_all_matches(item_view);
+            // Assume find_all_matches returns std::vector<std::pair<size_t /*end_pos*/, size_t /*pat_idx*/>>
+            for (const auto& [end_pos, pat_idx] : matches) {
+                size_t patlen = pattern_views[pat_idx].size();
+                if (end_pos + 1 >= patlen) {
+                    for (size_t i = end_pos + 1 - patlen; i <= end_pos && i < highlight_mask.size(); ++i)
+                        highlight_mask[i] = true;
+                }
+            }
+
+            // 3. Build result item
+            DisplayClipItem dci(item, std::move(highlight_mask));
+            // dci.id_ = item.id_;
+            // dci.highlight_mask = std::move(highlight_mask);
+
+            result.push_back(std::move(dci));
+        }
+    }
+
+    return result;
+}
 void Clipboard::filter(const std::wstring& pat){
     if(pat.empty()) return;
     filteredItems.clear();
@@ -65,5 +119,9 @@ void Clipboard::filter(const std::wstring& pat){
     // auto getContent = [](const std::unique_ptr<ClipItem>& item) -> std::wstring_view {
     //     return item->content;
     // };
-    filteredItems = string_util::filterContainerWithPats(allItems, pat, getContent);
+    // filteredItems = string_util::filterContainerWithPats(allItems, pat, getContent);
+    filteredItems = filterContainerWithHighlights(allItems, pat);
+    if(pat == L"67774"){
+        OutputDebugString(L"sss\n");
+    }
 }

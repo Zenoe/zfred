@@ -13,17 +13,15 @@ public:
     using StringView = std::basic_string_view<CharT>;
 
     struct Node {
-        // Use small-vector optimization if needed for larger alphabets
         struct Edge {
             CharT ch;
             Node* next;
         };
         std::vector<Edge> nexts;
         Node* fail = nullptr;
-        int pat_idx = -1;
+        std::vector<int> pattern_indices;
     };
 
-    // For memory efficiency, store nodes with unique_ptrs
     std::vector<std::unique_ptr<Node>> all_nodes;
     Node* root;
 
@@ -33,27 +31,23 @@ public:
     }
 
     void build(const std::vector<StringView>& patterns) {
-        // Trie construction
         for (int i = 0; i < static_cast<int>(patterns.size()); ++i) {
             Node* node = root;
             for (CharT c : patterns[i]) {
                 auto it = std::find_if(node->nexts.begin(), node->nexts.end(),
-                    [c](const typename Node::Edge& e) { return e.ch == c; });
+                                       [c](const typename Node::Edge& e) { return e.ch == c; });
                 if (it == node->nexts.end()) {
                     all_nodes.emplace_back(std::make_unique<Node>());
-                    //node->nexts.push_back(Edge{ c, all_nodes.back().get() });
-                    node->nexts.push_back(typename Node::Edge{ c, all_nodes.back().get() });
+                    node->nexts.push_back(typename Node::Edge{c, all_nodes.back().get()});
                     node = all_nodes.back().get();
-                }
-                else {
+                } else {
                     node = it->next;
                 }
             }
-            node->pat_idx = i;
+            node->pattern_indices.push_back(i);
         }
-        // Build failure links (BFS)
         std::queue<Node*> q;
-		for (typename Node::Edge& e : root->nexts){
+        for (typename Node::Edge& e : root->nexts) {
             e.next->fail = root;
             q.push(e.next);
         }
@@ -69,20 +63,53 @@ public:
                     e.next->fail = root;
                 q.push(e.next);
             }
+            // Propagate pattern_indices through fail links for overlapping matches
+            if (u->fail && !u->fail->pattern_indices.empty()) {
+                u->pattern_indices.insert(u->pattern_indices.end(),
+                                         u->fail->pattern_indices.begin(),
+                                         u->fail->pattern_indices.end());
+            }
         }
     }
-    void search(const StringView& text, std::vector<bool>& found) const {
-        Node* node = root;
-        for (CharT c : text) {
-            while (node && !has_edge(node, c))
-                node = node->fail;
-            if (node)
-                node = get_edge(node, c);
-            else
-                node = root;
-            for (Node* tmp = node; tmp && tmp->pat_idx != -1; tmp = tmp->fail)
-                found[tmp->pat_idx] = true;
+    void search(std::wstring_view text, std::vector<bool>& found) const {
+        Node* curr = root;
+        for (size_t i = 0; i < text.size(); ++i) {
+            wchar_t c = text[i];
+            while (curr != root && !has_edge(curr, c))
+                curr = curr->fail;
+            if (has_edge(curr, c))
+                curr = get_edge(curr, c);
+            for (int pat_idx : curr->pattern_indices)
+                found[pat_idx] = true;
         }
+    }
+    // void search(const StringView& text, std::vector<bool>& found) const {
+    //     Node* node = root;
+    //     for (CharT c : text) {
+    //         while (node && !has_edge(node, c))
+    //             node = node->fail;
+    //         if (node)
+    //             node = get_edge(node, c);
+    //         else
+    //             node = root;
+    //         for (Node* tmp = node; tmp && tmp->pat_idx != -1; tmp = tmp->fail)
+    //             found[tmp->pat_idx] = true;
+    //     }
+    // }
+    // Collects (end_pos, pattern_index) for all matches
+    std::vector<std::pair<size_t, size_t>> find_all_matches(StringView text) const {
+        std::vector<std::pair<size_t, size_t>> matches;
+        Node* curr = root;
+        for (size_t i = 0; i < text.size(); ++i) {
+            CharT c = text[i];
+            while (curr != root && !has_edge(curr, c))
+                curr = curr->fail;
+            if (has_edge(curr, c))
+                curr = get_edge(curr, c);
+            for (int pat_idx : curr->pattern_indices)
+                matches.emplace_back(i, pat_idx);
+        }
+        return matches;
     }
 
 private:
@@ -95,6 +122,108 @@ private:
         return nullptr;
     }
 };
+// class AhoCorasick {
+// public:
+//     using StringView = std::basic_string_view<CharT>;
+
+//     struct Node {
+//         // Use small-vector optimization if needed for larger alphabets
+//         struct Edge {
+//             CharT ch;
+//             Node* next;
+//         };
+//         std::vector<Edge> nexts;
+//         Node* fail = nullptr;
+//         int pat_idx = -1;
+//     };
+
+//     // For memory efficiency, store nodes with unique_ptrs
+//     std::vector<std::unique_ptr<Node>> all_nodes;
+//     Node* root;
+
+//     AhoCorasick() {
+//         all_nodes.emplace_back(std::make_unique<Node>());
+//         root = all_nodes.back().get();
+//     }
+
+//     void build(const std::vector<StringView>& patterns) {
+//         // Trie construction
+//         for (int i = 0; i < static_cast<int>(patterns.size()); ++i) {
+//             Node* node = root;
+//             for (CharT c : patterns[i]) {
+//                 auto it = std::find_if(node->nexts.begin(), node->nexts.end(),
+//                     [c](const typename Node::Edge& e) { return e.ch == c; });
+//                 if (it == node->nexts.end()) {
+//                     all_nodes.emplace_back(std::make_unique<Node>());
+//                     //node->nexts.push_back(Edge{ c, all_nodes.back().get() });
+//                     node->nexts.push_back(typename Node::Edge{ c, all_nodes.back().get() });
+//                     node = all_nodes.back().get();
+//                 }
+//                 else {
+//                     node = it->next;
+//                 }
+//             }
+//             node->pat_idx = i;
+//         }
+//         // Build failure links (BFS)
+//         std::queue<Node*> q;
+// 		for (typename Node::Edge& e : root->nexts){
+//             e.next->fail = root;
+//             q.push(e.next);
+//         }
+//         while (!q.empty()) {
+//             Node* u = q.front(); q.pop();
+//             for (typename Node::Edge& e : u->nexts) {
+//                 Node* f = u->fail;
+//                 while (f && !has_edge(f, e.ch))
+//                     f = f->fail;
+//                 if (f)
+//                     e.next->fail = get_edge(f, e.ch);
+//                 else
+//                     e.next->fail = root;
+//                 q.push(e.next);
+//             }
+//         }
+//     }
+//     void search(const StringView& text, std::vector<bool>& found) const {
+//         Node* node = root;
+//         for (CharT c : text) {
+//             while (node && !has_edge(node, c))
+//                 node = node->fail;
+//             if (node)
+//                 node = get_edge(node, c);
+//             else
+//                 node = root;
+//             for (Node* tmp = node; tmp && tmp->pat_idx != -1; tmp = tmp->fail)
+//                 found[tmp->pat_idx] = true;
+//         }
+//     }
+//     std::vector<std::pair<size_t, size_t>> find_all_matches(std::wstring_view text) {
+//         std::vector<std::pair<size_t, size_t>> matches; // (end_pos, pat_idx)
+//         Node* curr = root;
+//         for (size_t i = 0; i < text.size(); ++i) {
+//             wchar_t c = text[i];
+//             while (curr != root && !curr->next.count(c))
+//                 curr = curr->fail;
+//             if (curr->next.count(c))
+//                 curr = curr->next[c];
+//             // For each pattern ending here, add endpos/pat_idx:
+//             for (int pat_idx : curr->pattern_indices)
+//                 matches.emplace_back(i, pat_idx);
+//         }
+//         return matches;
+//     }
+
+// private:
+//     static bool has_edge(Node* n, CharT c) {
+//         for (const auto& e : n->nexts) if (e.ch == c) return true;
+//         return false;
+//     }
+//     static Node* get_edge(Node* n, CharT c) {
+//         for (const auto& e : n->nexts) if (e.ch == c) return e.next;
+//         return nullptr;
+//     }
+// };
 
 // for example
 template<typename CharT>

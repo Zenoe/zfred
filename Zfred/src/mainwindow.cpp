@@ -1192,6 +1192,50 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         if ((HWND)((LPNMHDR)lParam)->hwndFrom == self->hListview_) {
             if (((NMHDR*)lParam)->code == LVN_GETDISPINFOW) {
                 self->processListViewContent(lParam);
+            }else if(self->mode_ == Mode::Clipboard && ((NMHDR*)lParam)->code == NM_CUSTOMDRAW){
+
+                LPNMLVCUSTOMDRAW lvcd = (LPNMLVCUSTOMDRAW)lParam;
+                switch (lvcd->nmcd.dwDrawStage) {
+                case CDDS_PREPAINT:
+                    return CDRF_NOTIFYITEMDRAW;
+                case CDDS_ITEMPREPAINT:
+                    return CDRF_NOTIFYSUBITEMDRAW;
+                case CDDS_SUBITEM | CDDS_ITEMPREPAINT: {
+                    int itemIdx = (int)lvcd->nmcd.dwItemSpec;
+                    int subItem = lvcd->iSubItem; // If you use subitems; adjust as needed
+
+                    // Get item:
+                    const auto& item = self->clipboard_.getItems()[itemIdx];
+                    RECT rc;
+                    ListView_GetSubItemRect(lvcd->nmcd.hdr.hwndFrom, itemIdx, subItem, LVIR_LABEL, &rc);
+
+                    int x = rc.left;
+                    int y = rc.top;
+                    HDC hdc = lvcd->nmcd.hdc;
+
+                    // Prepare font and colors:
+                    int oldBkMode = SetBkMode(hdc, TRANSPARENT);
+                    COLORREF defaultColor = GetTextColor(hdc);
+
+                    // Draw text char by char, set color for matches
+                    for (size_t i = 0; i < item.content.size(); ++i) {
+                        std::wstring chr(1, item.content[i]);
+                        SIZE sz;
+                        GetTextExtentPoint32W(hdc, chr.c_str(), 1, &sz);
+                        if (item.highlight_mask.size() > i-1 && item.highlight_mask[i]) {
+                            SetTextColor(hdc, HEXTOCOLORREF(0x3370FF)); // Red highlight
+                        } else {
+                            SetTextColor(hdc, defaultColor);
+                        }
+                        TextOutW(hdc, x, y, chr.c_str(), 1);
+                        x += sz.cx;
+                    }
+                    SetTextColor(hdc, defaultColor);
+                    SetBkMode(hdc, oldBkMode);
+
+                    return CDRF_SKIPDEFAULT; // tells ListView not to draw text itself
+                }
+                }
             }
         }
         break;

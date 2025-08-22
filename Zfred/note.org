@@ -3,7 +3,7 @@
 * TODO highlight chars matched to searching text
 * TODO clipboard
 ** TODO activate
-** TODO
+** TODO test largetext
 **
 * DONE 回车应该是打开，而不是autofill
 * TODO setting:
