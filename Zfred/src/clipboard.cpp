@@ -14,15 +14,15 @@ Clipboard::Clipboard()  {
 
 
 void Clipboard::add (std::wstring item){
-    db_->addItem(item);
+    // db_->addItem(item);
 }
 
-int Clipboard::getCount(){
-    return db_->getItemCount();
+size_t Clipboard::getCount(){
+    return filteredItems.size();
 }
 
 
-std::vector<ClipItem> Clipboard::getItems(int start, int limit ) {
+const std::vector<ClipItem>& Clipboard::getItems(int start, int limit ) {
     return filteredItems;
 }
 
@@ -62,5 +62,8 @@ void Clipboard::filter(const std::wstring& pat){
     if(pat.empty()) return;
     filteredItems.clear();
     auto getContent = [](const ClipItem& d) -> std::wstring_view { return d.content; };
+    // auto getContent = [](const std::unique_ptr<ClipItem>& item) -> std::wstring_view {
+    //     return item->content;
+    // };
     filteredItems = string_util::filterContainerWithPats(allItems, pat, getContent);
 }

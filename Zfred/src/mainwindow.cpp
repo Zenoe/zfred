@@ -310,9 +310,9 @@ void MainWindow::parse_input(const std::wstring& text) {
             browser_.update(pat, show_hidden_);
             SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
         }
-        else {
-            mode_ = Mode::History;
-        }
+        // else {
+        //     mode_ = Mode::History;
+        // }
     }
 	update_listview();
 }
@@ -716,7 +716,8 @@ void MainWindow::processListViewContent(LPARAM lParam) {
     }
     else if (mode_ == Mode::Clipboard) {
         //ListView_DeleteAllItems(hListview_);
-        auto items = clipboard_.getItems();
+        const auto& items = clipboard_.getItems();
+        // auto items = clipboard_.getItems();
         if (iItem < items.size()) {
 			set_item_label(plvdi, items[iItem].content);
         }

@@ -136,9 +136,13 @@ namespace string_util {
         AhoCorasick<wchar_t> ac;
         ac.build(pattern_views);
 
+        //  create a single found vector outside the loop and std::fill(found.begin(), found.end(), false) before each use.
+        // This eliminates allocation/deallocation every iteration.
+        std::vector<bool> found(pattern_views.size(), false);
         for (const auto& item : items) {
+            // std::vector<bool> found(pattern_views.size(), false); // move outside of loop
+            std::fill(found.begin(), found.end(), false); // Reuse and reset
             std::wstring_view item_view = extractor(item);
-            std::vector<bool> found(pattern_views.size(), false);
             ac.search(item_view, found);
             if (std::all_of(found.begin(), found.end(), [](bool b) { return b; })) {
                 result.push_back(item);

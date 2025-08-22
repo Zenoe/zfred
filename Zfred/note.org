@@ -26,6 +26,7 @@ exclude list
 * TODO grpc to browser files on other host
 * DONE open file path in history/bookmark mode
 
+* TODO filebrowser support %appdata%, ~ etc
 
 
 
@@ -37,6 +38,7 @@ Ctrl+1: switch to history
 Ctrl+2: switch to bookmark
 Ctrl+H: Toggle hidden files
 Ctrl+B: Bookmark/unbookmark selected file or dir
+ctrl alt b: clipboard
 F2 or Menu Key: File actions menu (open, open folder, delete, rename, copy, (un)bookmark)
 
 Arrow keys/Tab/Enter: Navigate, accept

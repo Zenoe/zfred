@@ -3,21 +3,39 @@
 #include "constant.h"
 
 struct ClipItem {
-    int id;
+    int id_;
     std::wstring content;
     std::wstring timestamp;
+template<typename S1, typename S2>
+    ClipItem(int id, S1&& pcontent, S2&& ptimestamp)
+        : id_(id), content(std::forward<S1>(pcontent)), timestamp(std::forward<S2>(ptimestamp)) {}
+    // // Copy version
+    // ClipItem(int id, const std::wstring& pcontent, const std::wstring& ptimestamp)
+    //     : id_(id), content(pcontent), timestamp(ptimestamp) {}
+
+    // // Move version
+    // ClipItem(int id, std::wstring&& pcontent, std::wstring&& ptimestamp)
+    //     : id_(id), content(std::move(pcontent)), timestamp(std::move(ptimestamp)) {}
 };
 
+struct DisplayClipItem : ClipItem {
+    std::vector<bool> highlight_mask;
+};
+// struct DisplayClipItem {
+//     const ClipItem* base;
+//     std::vector<bool> highlight_mask;
+// };
 class Clipboard {
 public:
     Clipboard();
     void add(std::wstring item);
-    int getCount();
-    std::vector<ClipItem> getItems(int start = 0, int limit = clipItemSize);
+    size_t getCount();
+    const std::vector<ClipItem>& getItems(int start = 0, int limit = clipItemSize);
     bool write(int idx);
     void filter(const std::wstring&);
 private:
     std::unique_ptr<Database<ClipItem>> db_;
     std::vector<ClipItem> allItems;
     std::vector<ClipItem> filteredItems;
+    // std::vector<DisplayClipItem> filteredItems;
 };

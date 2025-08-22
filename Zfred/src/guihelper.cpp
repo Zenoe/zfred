@@ -84,7 +84,7 @@ void GuiHelper::ShowShellContextMenu(HWND hwndParent, HWND hListView, std::wstri
 
         bool qttab = true; // temporately set true
         int menuCount = GetMenuItemCount(hMenu);
-        for (UINT i = 3; i < menuCount; ++i) {
+        for (int i = 3; i < menuCount; ++i) {
             UINT cmdId = GetMenuItemID(hMenu, i);
             if (cmdId == -1) continue; // Separator
             WCHAR verbW[256] = { 0 };

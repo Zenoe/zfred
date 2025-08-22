@@ -88,6 +88,13 @@ public:
 
 			sqlite3_bind_int(stmt, 1, limit);
 			sqlite3_bind_int(stmt, 2, start);
+			// while (sqlite3_step(stmt) == SQLITE_ROW) {
+			// 					items.push_back(std::make_unique<T>(
+			// 														sqlite3_column_int(stmt, 0),
+			// 														string_util::utf8_to_wstring(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))),
+			// 														string_util::utf8_to_wstring(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2)))
+			// 			));
+			// }
 
 			while (sqlite3_step(stmt) == SQLITE_ROW) {
 				items.push_back(T{
