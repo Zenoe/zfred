@@ -40,6 +40,6 @@ public:
     void filter(const std::wstring&);
 private:
     std::unique_ptr<Database<ClipItem>> db_;
-    std::vector<ClipItem> allItems;
+    std::deque<ClipItem> allItems;
     std::vector<DisplayClipItem> filteredItems;
 };

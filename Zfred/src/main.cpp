@@ -1,5 +1,6 @@
 ﻿#include "mainwindow.h"
 #include <commctrl.h>
+#include "utils/log.h"
 
 //#include <gdiplus.h>
 //using namespace Gdiplus;
@@ -41,6 +42,8 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
     //ClipboardManager clip(app.GetHwnd(), &db);
     //clip.Start();
 
+    setup_logging();
+    spdlog::info("WinMain started");
     if (!app.create())
         return 1;
     app.show(true); // Start hidden

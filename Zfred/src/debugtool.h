@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include <windows.h>
 #include <sstream>
 #include <vector>
@@ -12,8 +12,8 @@ void OutputDebugPrint(Args&&... args) {
 #endif
 }
 
-// ·ÀÖ¹¶àÖØ¶¨Òå£¬ÒªÃ´inline£¬ÒªÃ´ÔÚcppÖĞ¶¨Òå¡£ .h ÎÄ¼ş¸ºÔğÉùÃ÷
-// Ä£°åº¯Êı²»ÊÜ´ËÏŞÖÆ
+// é˜²æ­¢å¤šé‡å®šä¹‰ï¼Œè¦ä¹ˆinlineï¼Œè¦ä¹ˆåœ¨cppä¸­å®šä¹‰ã€‚ .h æ–‡ä»¶è´Ÿè´£å£°æ˜
+// æ¨¡æ¿å‡½æ•°ä¸å—æ­¤é™åˆ¶
 //inline void OutputDebugPrintVev(const std::vector<FileEntry>& entries) {
 //    OutputDebugPrint("vev begin");
 //    for (auto e : entries) {

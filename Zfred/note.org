@@ -46,3 +46,5 @@ Double-click: Same as Enter
 
 
 * vcpkg install sqlite3
+* vkpcg install spdlog
+Configuration Properties > C/C++ > Command Line In Additional Options, add: /utf-8

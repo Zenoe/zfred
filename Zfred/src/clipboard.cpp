@@ -3,12 +3,13 @@
 #include <chrono>
 #include <string>
 #include <iostream>
+
+#include <spdlog/spdlog.h>
 #include "utils/stringutil.h"
 
 Clipboard::Clipboard()  {
     db_ = std::make_unique<Database<ClipItem>>(L"clipboard.sqlite");
     allItems = db_->getRecord(L"clipboard_items", 0, clipItemSize);
-    filteredItems.reserve(allItems.size());
     filteredItems.reserve(allItems.size());
     for (const ClipItem& clip : allItems) {
         std::vector<bool> mask;
@@ -21,16 +22,27 @@ Clipboard::Clipboard()  {
 
 
 void Clipboard::add (std::wstring item){
-    db_->addItem(item);
+    std::string utf8_item = string_util::wstring_to_utf8(item);
+    spdlog::info("Added clipboard item: {}", utf8_item);
+    //spdlog::info(string_util::wstring_to_utf8(L"Added clipboard item:"), item);
+    ClipItem newItem = db_->addItem(item);
+    if (newItem.id_ != -1) {
+        if (allItems.size() > clipItemSize) {
+            allItems.pop_front();
+        }
+		allItems.emplace_back(newItem);
+		std::vector<bool> mask;
+		filteredItems.emplace_back(newItem, mask);
+	}
 }
 
-size_t Clipboard::getCount(){
-    return filteredItems.size();
+size_t Clipboard::getCount() {
+	return filteredItems.size();
 }
 
 
-const std::vector<DisplayClipItem>& Clipboard::getItems(int start, int limit ) {
-    return filteredItems;
+const std::vector<DisplayClipItem>& Clipboard::getItems(int start, int limit) {
+	return filteredItems;
 }
 
 bool Clipboard::write(int idx){
@@ -65,7 +77,7 @@ bool Clipboard::write(int idx){
     return true;
 }
 
-std::vector<DisplayClipItem> filterContainerWithHighlights(const std::vector<ClipItem>& items, const std::wstring& pat)
+std::vector<DisplayClipItem> filterContainerWithHighlights(const std::deque<ClipItem>& items, const std::wstring& pat)
 {
     std::vector<DisplayClipItem> result;
     std::vector<std::wstring> pats = string_util::split_by_space(pat);
@@ -103,6 +115,7 @@ std::vector<DisplayClipItem> filterContainerWithHighlights(const std::vector<Cli
 
             // 3. Build result item
             DisplayClipItem dci(item, std::move(highlight_mask));
+            //DisplayClipItem dci;
             // dci.id_ = item.id_;
             // dci.highlight_mask = std::move(highlight_mask);
 
@@ -113,15 +126,18 @@ std::vector<DisplayClipItem> filterContainerWithHighlights(const std::vector<Cli
     return result;
 }
 void Clipboard::filter(const std::wstring& pat){
-    if(pat.empty()) return;
-    filteredItems.clear();
-    auto getContent = [](const ClipItem& d) -> std::wstring_view { return d.content; };
-    // auto getContent = [](const std::unique_ptr<ClipItem>& item) -> std::wstring_view {
-    //     return item->content;
+    if (pat.empty()) {
+		for (const ClipItem& clip : allItems) {
+			std::vector<bool> mask;
+			filteredItems.emplace_back(clip, mask);
+		}
+		return;
+	}
+	filteredItems.clear();
+	auto getContent = [](const ClipItem& d) -> std::wstring_view { return d.content; };
+	// auto getContent = [](const std::unique_ptr<ClipItem>& item) -> std::wstring_view {
+	//     return item->content;
     // };
     // filteredItems = string_util::filterContainerWithPats(allItems, pat, getContent);
     filteredItems = filterContainerWithHighlights(allItems, pat);
-    if(pat == L"67774"){
-        OutputDebugString(L"sss\n");
-    }
 }

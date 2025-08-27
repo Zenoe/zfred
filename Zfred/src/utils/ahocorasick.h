@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <vector>
 #include <queue>
@@ -250,8 +250,8 @@ bool ah_substring_match(const std::vector<std::basic_string_view<CharT>>& patter
 //    std::cout << res << '\n'; // prints 1 (true)
 //
 //    // Works for wstring_view too!
-//    std::vector<std::wstring_view> wpats = { L"Ã¨", L"×ø" };
-//    std::wstring wtxt = L"Ã¨×øÔÚµæ×ÓÉÏ";
+//    std::vector<std::wstring_view> wpats = { L"çŒ«", L"å" };
+//    std::wstring wtxt = L"çŒ«ååœ¨å«å­ä¸Š";
 //    bool wres = substring_match(wpats, std::wstring_view(wtxt));
 //    std::wcout << wres << L'\n'; // prints 1 (true)
 //}

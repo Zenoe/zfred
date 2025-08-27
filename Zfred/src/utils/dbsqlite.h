@@ -35,17 +35,33 @@ public:
 		if (db_) sqlite3_close(db_);
 	}
 
-	bool addItem(const std::wstring& content) {
-
+	T addItem(const std::wstring& content) {
 		const char* sql = "INSERT INTO clipboard_items(content) VALUES (?);";
 		sqlite3_stmt* stmt;
 		std::lock_guard<std::mutex> lock(mtx_);
-		if (sqlite3_prepare_v2(db_, sql, -1, &stmt, NULL) != SQLITE_OK) return false;
+		if (sqlite3_prepare_v2(db_, sql, -1, &stmt, NULL) != SQLITE_OK) return {};
 		sqlite3_bind_text(stmt, 1, string_util::wstring_to_utf8(content).c_str(), -1, SQLITE_TRANSIENT);
 		bool ok = sqlite3_step(stmt) == SQLITE_DONE;
 		sqlite3_finalize(stmt);
-		return ok;
+		if(!ok) return {};
+
+		sqlite3_int64 rowid = sqlite3_last_insert_rowid(db_);
+		// SELECT row back
+		T item;
+		const char* sql_select = "SELECT id, content FROM clipboard_items WHERE id = ?;";
+		sqlite3_stmt* select_stmt;
+		if (sqlite3_prepare_v2(db_, sql_select, -1, &select_stmt, NULL) == SQLITE_OK) {
+			sqlite3_bind_int64(select_stmt, 1, rowid);
+			if (sqlite3_step(select_stmt) == SQLITE_ROW) {
+				item.id_ = sqlite3_column_int(select_stmt, 0);
+				const char* content_utf8 = (const char*)sqlite3_column_text(select_stmt, 1);
+				item.content = string_util::utf8_to_wstring(content_utf8);
+			}
+			sqlite3_finalize(select_stmt);
+		}
+		return item;
 	}
+
 	int getItemCount() const {
 
 		std::lock_guard<std::mutex> lock(mtx_);
@@ -60,9 +76,9 @@ public:
 		sqlite3_finalize(stmt);
 		return count;
 	}
-	std::vector<T> getRecord(const std::wstring& tableName, int start = 0, int limit = 100) {
+	std::deque<T> getRecord(const std::wstring& tableName, int start = 0, int limit = 100) {
 
-		std::vector<T> items;
+		std::deque<T> items;
 
 		// Validate table name is safe (alphanumeric + underscore)
 		std::wstring tableNameSafe = tableName;

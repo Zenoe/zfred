@@ -24,3 +24,6 @@ constexpr int WND_W = (PADDING << 1) + EDIT_W + COMBO_W + CONTROL_MARGIN;
 constexpr int WND_H = (PADDING << 1) + EDIT_H + CONTROL_MARGIN + 300;
 
 constexpr int LIST_W = WND_W;
+
+const UINT FILTER_DEBOUNCE_ID = 100;
+const UINT FILTER_DEBOUNCE_DELAY = 200; // ms

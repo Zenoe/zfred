@@ -1,4 +1,4 @@
-#include "history.h"
+ï»¿#include "history.h"
 #include <fstream>
 #include "utils/sysutil.h"
 #include <thread>
@@ -29,7 +29,7 @@ HistoryManager::HistoryManager(){
 				filtered_items_ = std::make_shared<std::deque<std::wstring>>(*items_);
 			}
 			else {
-				// ÏÈ¿½±´Ò»·İitems_£¬¼õÉÙ¼ÓËøÊ±¼äºÍÁ£¶È
+				// å…ˆæ‹·è´ä¸€ä»½items_ï¼Œå‡å°‘åŠ é”æ—¶é—´å’Œç²’åº¦
 				std::deque<std::wstring> items_copy;
 				{
 					std::lock_guard<std::mutex> items_lock(items_mtx);
@@ -40,13 +40,13 @@ HistoryManager::HistoryManager(){
 					filtered_items_->clear();
 				}
 
-				// ¾Ö²¿±äÁ¿×öÉ¸Ñ¡£¬±ÜÃâ·´¸´¼ÓËø
+				// å±€éƒ¨å˜é‡åšç­›é€‰ï¼Œé¿å…åå¤åŠ é”
 				std::deque<std::wstring> result;
 				auto t0 = std::chrono::steady_clock::now();
 				result = string_util::filterContainerWithPats(items_copy, pat);
 
 				//std::vector<std::wstring_view> pattern_views;
-				//// split_by_space ²ÎÊıÊÇÒıÓÃ, patÊÇ¾Ö²¿¿½±´ÁËÒ»·İ³ÉÔ±±äÁ¿£¬ËùÒÔ²»»áÔÚsplit_by_spaceÖĞÍ¾Ö´ĞĞ¹ı³ÌÖĞ±»ÍâÃæĞŞ¸Ä
+				//// split_by_space å‚æ•°æ˜¯å¼•ç”¨, patæ˜¯å±€éƒ¨æ‹·è´äº†ä¸€ä»½æˆå‘˜å˜é‡ï¼Œæ‰€ä»¥ä¸ä¼šåœ¨split_by_spaceä¸­é€”æ‰§è¡Œè¿‡ç¨‹ä¸­è¢«å¤–é¢ä¿®æ”¹
 				//std::vector<std::wstring> pats = string_util::split_by_space(pat);
 				//pattern_views.reserve(pats.size());
 				//for (const auto& s : pats)
@@ -69,7 +69,7 @@ HistoryManager::HistoryManager(){
 				auto t1 = std::chrono::steady_clock::now();
 
 				OutputDebugPrint("time const: ", std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
-				// Ò»´ÎĞÔĞ´»Øfiltered_items_
+				// ä¸€æ¬¡æ€§å†™å›filtered_items_
 				{
 
 					std::lock_guard<std::mutex> filtered_lock(filtered_items_mtx);
@@ -297,19 +297,19 @@ void HistoryManager::filterModifyItemThread(const std::wstring& pat, std::functi
 				std::lock_guard<std::mutex> lock(filtered_items_mtx);
 				this->filtered_items_->clear();
 			}
-			// ÏÈ¿½±´Ò»·İitems_£¬¼õÉÙ¼ÓËøÊ±¼äºÍÁ£¶È
+			// å…ˆæ‹·è´ä¸€ä»½items_ï¼Œå‡å°‘åŠ é”æ—¶é—´å’Œç²’åº¦
 			std::deque<std::wstring> items_copy;
 			{
 				std::lock_guard<std::mutex> items_lock(items_mtx);
 				items_copy = *items_;
 			}
 
-			// ¾Ö²¿±äÁ¿×öÉ¸Ñ¡£¬±ÜÃâ·´¸´¼ÓËø
+			// å±€éƒ¨å˜é‡åšç­›é€‰ï¼Œé¿å…åå¤åŠ é”
 			std::deque<std::wstring> result;
 			for (const auto& item : items_copy) {
 				//if (string_util::fuzzy_match(pat, item)) {
 				std::vector<std::wstring_view> pattern_views;
-				// todo split_by_space ²ÎÊıÊÇÒıÓÃ, pat ¿ÉÄÜÔÚsplit_by_spaceÖĞÍ¾Ö´ĞĞ¹ı³ÌÖĞ±»ÍâÃæĞŞ¸Ä
+				// todo split_by_space å‚æ•°æ˜¯å¼•ç”¨, pat å¯èƒ½åœ¨split_by_spaceä¸­é€”æ‰§è¡Œè¿‡ç¨‹ä¸­è¢«å¤–é¢ä¿®æ”¹
 				std::vector<std::wstring> pats = string_util::split_by_space(pat);
 				pattern_views.reserve(pats.size());
 				for (const auto& s : pats)
@@ -321,7 +321,7 @@ void HistoryManager::filterModifyItemThread(const std::wstring& pat, std::functi
 				}
 			}
 
-			// Ò»´ÎĞÔĞ´»Øfiltered_items_
+			// ä¸€æ¬¡æ€§å†™å›filtered_items_
 			{
 				std::lock_guard<std::mutex> filtered_lock(filtered_items_mtx);
 				this->filtered_items_ = std::make_shared<std::deque<std::wstring>>(std::move(result));

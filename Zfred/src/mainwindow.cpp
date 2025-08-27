@@ -29,6 +29,8 @@ const COLORREF LISTVIEW_BK_COLOR = RGB(247, 248, 250);
 HBRUSH gEditBrush = nullptr;
 
 MainWindow* MainWindow::self = nullptr;
+UINT_PTR g_filterTimer = 0;
+
 MainWindow::MainWindow(HINSTANCE hInstance)
     : hInstance_(hInstance), hwnd_(nullptr), edit_(nullptr), listbox_(nullptr), combo_mode_(nullptr),
     mode_(Mode::History), sel_(-1), show_hidden_(false), last_input_(L"")
@@ -295,25 +297,17 @@ void MainWindow::update_listview() {
 void MainWindow::parse_input(const std::wstring& text) {
     // todo move to update_listview() ?
     last_input_ = text;
-    if(text.size() == 0){
-        mode_ = Mode::History;
-        SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
-    }else{
-        if (text.size() >= 2 && text[1] == L':' && (text[2] == L'/' || text[2] == L'\\')) {
-            // Looks like C:\ or C:/ path
-            mode_ = Mode::FileBrowser;
-            size_t lastsep = text.find_last_of(L"\\/");
-            std::wstring dir = (lastsep != std::wstring::npos) ? text.substr(0, lastsep + 1) : text;
-            std::wstring pat = (lastsep != std::wstring::npos) ? text.substr(lastsep + 1) : L"";
-            OutputDebugPrint("curdir: ", dir, pat, " ", text);
-            browser_.set_cwd(dir);
-            browser_.update(pat, show_hidden_);
-            SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
-        }
-        // else {
-        //     mode_ = Mode::History;
-        // }
-    }
+	if (text.size() >= 2 && text[1] == L':' && (text[2] == L'/' || text[2] == L'\\')) {
+		// Looks like C:\ or C:/ path
+		mode_ = Mode::FileBrowser;
+		size_t lastsep = text.find_last_of(L"\\/");
+		std::wstring dir = (lastsep != std::wstring::npos) ? text.substr(0, lastsep + 1) : text;
+		std::wstring pat = (lastsep != std::wstring::npos) ? text.substr(lastsep + 1) : L"";
+		OutputDebugPrint("curdir: ", dir, pat, " ", text);
+		browser_.set_cwd(dir);
+		browser_.update(pat, show_hidden_);
+		SendMessageW(combo_mode_, CB_SETCURSEL, static_cast<int>(mode_), 0);
+	}
 	update_listview();
 }
 
@@ -623,6 +617,7 @@ LRESULT MainWindow::processBackspace()
         std::wstring buf(len, 0);
         GetWindowTextW(self->edit_, &buf[0], len + 1);
         last_input_ = std::move(buf);
+        OutputDebugPrint("process backspace");
 		self->update_listview();
 	}
     return 0;
@@ -662,7 +657,15 @@ LRESULT MainWindow::processAppendHistory() {
 
 void MainWindow::processListViewContent(LPARAM lParam) {
     auto set_item_label = [](NMLVDISPINFOW* plvdi, const std::wstring& text) {
-		std::wstring label = (FsUtils::is_dir(text.c_str()) ? L"🗂 " : L"🗎 ") + text;
+        std::wstring label = (FsUtils::is_dir(text.c_str()) ? L"🗂 " : L"🗎 ") + text;
+        // Handle newlines
+        // for (size_t pos = 0; (pos = label.find(L"\n", pos)) != std::wstring::npos;) {
+        //     label.replace(pos, 1, L"↓");
+        //     pos += 1;
+        // }
+        // for (size_t pos = 0; (pos = label.find(L"\r", pos)) != std::wstring::npos;) {
+        //     label.replace(pos, 1, L"");
+        // }
         wcsncpy_s(plvdi->item.pszText, plvdi->item.cchTextMax, label.c_str(), _TRUNCATE);
     };
 
@@ -909,9 +912,10 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
             return self->processAltBackspace();
         }
         break;
-	case WM_CHAR: {
-        return self->processChar(msg, wParam, lParam);
-	}
+		//case WM_CHAR: {
+		//	 // disable WM_CHAR, apply debouncing (FILTER_DEBOUNCE_ID)
+	 //       return self->processChar(msg, wParam, lParam);
+		//}
     }
     return DefSubclassProc(hEdit, msg, wParam, lParam);
 }
@@ -974,8 +978,29 @@ LRESULT MainWindow::processWMCommand(WPARAM wParam) {
             update_listview();
 			SetFocus(edit_);
 		}
-	}
+    }
+    else if (LOWORD(wParam) == EDITOR_ID) {
+        if (HIWORD(wParam) == EN_CHANGE) {
+            // Cancel previous timer if running
+            if (g_filterTimer)
+                KillTimer(hwnd_, FILTER_DEBOUNCE_ID);
+            // Start a new debounce timer
+            g_filterTimer = SetTimer(hwnd_, FILTER_DEBOUNCE_ID, FILTER_DEBOUNCE_DELAY, NULL);
+        }
+    }
 	return 0;
+}
+LRESULT MainWindow::processHotkey(WPARAM wParam) {
+        if (wParam == 1)
+            show(!IsWindowVisible(hwnd_));
+        else if (wParam == 2) {
+            show(true);
+            mode_ = Mode::Clipboard;
+            SendMessageW(combo_mode_, CB_SETCURSEL, (WPARAM)mode_, 0);
+            update_listview();
+            SetFocus(edit_);
+        }
+        return 0;
 }
 LRESULT MainWindow::processDrawItem(LPARAM lParam) {
     LPDRAWITEMSTRUCT pdis = (LPDRAWITEMSTRUCT)lParam;
@@ -1070,18 +1095,6 @@ LRESULT MainWindow::processDrawItem(LPARAM lParam) {
     return 0;
 }
 
-LRESULT MainWindow::processHotkey(WPARAM wParam) {
-        if (wParam == 1)
-            show(!IsWindowVisible(hwnd_));
-        else if (wParam == 2) {
-            show(true);
-            mode_ = Mode::Clipboard;
-            SendMessageW(combo_mode_, CB_SETCURSEL, (WPARAM)mode_, 0);
-            update_listview();
-            SetFocus(edit_);
-        }
-        return 0;
-}
 LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	if (!self) return DefWindowProcW(hwnd, msg, wParam, lParam);
 	switch (msg) {
@@ -1150,6 +1163,7 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         }
         break;
     case WM_DESTROY:
+        if (g_filterTimer) KillTimer(hwnd, FILTER_DEBOUNCE_ID);
         RemoveClipboardFormatListener(hwnd);
         self->save_all();
         CoUninitialize();
@@ -1218,12 +1232,18 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     COLORREF defaultColor = GetTextColor(hdc);
 
                     // Draw text char by char, set color for matches
+                    int line = 1;
                     for (size_t i = 0; i < item.content.size(); ++i) {
-                        std::wstring chr(1, item.content[i]);
+                        if (line > 2) break;
+                        if (item.content[i] == L'\n') {
+                            ++line;
+						}
+
+                        std::wstring chr(1, item.content[i] == L'\n' ? L'↓' : item.content[i]);//¶
                         SIZE sz;
                         GetTextExtentPoint32W(hdc, chr.c_str(), 1, &sz);
-                        if (item.highlight_mask.size() > i-1 && item.highlight_mask[i]) {
-                            SetTextColor(hdc, HEXTOCOLORREF(0x3370FF)); // Red highlight
+                        if (item.highlight_mask.size() > i && item.highlight_mask[i]) {
+                            SetTextColor(hdc, HEXTOCOLORREF(0x3370FF)); // highlight
                         } else {
                             SetTextColor(hdc, defaultColor);
                         }
@@ -1246,11 +1266,22 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         }
         break;
     }
-    case WM_TIMER:
+    case WM_TIMER: {
+        if (wParam == FILTER_DEBOUNCE_ID) {
+            KillTimer(hwnd, FILTER_DEBOUNCE_ID);
+            g_filterTimer = 0;
+            wchar_t buf[512];
+            GetWindowTextW(self->edit_, buf, ARRAYSIZE(buf));
+            self->parse_input(buf);
+
+            //ApplyHistoryFilter(buf);
+            return 0;
+        }
         if (wParam == SPINNER_TIMER_ID) {
             self->update_spinner();
         }
-		return 0;
+        return 0;
+    }
     case WM_DRAWITEM: {
         return self ->processDrawItem(lParam);
     }

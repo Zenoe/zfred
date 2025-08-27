@@ -73,6 +73,9 @@
     <ClInclude Include="src\resource.h">
       <Filter>资源文件</Filter>
     </ClInclude>
+    <ClInclude Include="src\utils\log.h">
+      <Filter>src\utils</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\bookmarks.cpp">
@@ -118,9 +121,6 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="src\settingdlg.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="src\3rd\shell.c">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>
