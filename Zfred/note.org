@@ -22,6 +22,8 @@ exclude list
 ** TODO file explorer
 ** TODO only show file/folder/*.ext
 ** TODO sort by date desc?
+** TODO alternative line bg
+** TODO clipboard mode not selected row highlight
 * TODO command/history save to sqlite?
 * TODO grpc to browser files on other host
 * DONE open file path in history/bookmark mode

@@ -717,7 +717,9 @@ void MainWindow::processListViewContent(LPARAM lParam) {
             set_item_label(plvdi, entry);
         }
     }
-    else if (mode_ == Mode::Clipboard) {
+    // todo remove this code? In clipboard mode, implement custom drawing for the ListView.
+    else if (mode_ == Mode::Count) {
+    //else if (mode_ == Mode::Clipboard) {
         //ListView_DeleteAllItems(hListview_);
         const auto& items = clipboard_.getItems();
         // auto items = clipboard_.getItems();
@@ -1103,9 +1105,18 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             gEditBrush = CreateSolidBrush(EDIT_BK_COLOR);
             CoInitialize(NULL); // Must call this to use shell COM interfaces!
             self->hListview_ = CreateWindowW(WC_LISTVIEWW, L"",
-                                       WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_OWNERDATA | LVS_SINGLESEL | LVS_NOCOLUMNHEADER | LVS_SHOWSELALWAYS,
-                                       PADDING, PADDING + EDIT_H + CONTROL_MARGIN, 0, 0,
-                                       hwnd, (HMENU)LISTVIEW_ID, GetModuleHandle(nullptr), nullptr);
+                                             WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_OWNERDATA | LVS_SINGLESEL | LVS_NOCOLUMNHEADER | LVS_SHOWSELALWAYS,
+                                             PADDING, PADDING + EDIT_H + CONTROL_MARGIN, 0, 0,
+                                             hwnd, (HMENU)LISTVIEW_ID, GetModuleHandle(nullptr), nullptr);
+            ListView_SetExtendedListViewStyle(self->hListview_, 
+                                              LVS_EX_DOUBLEBUFFER |    // Reduces flicker
+                                              LVS_EX_FULLROWSELECT |   // Select entire row, without this only the part near the start can be clicked(selected)
+                                              LVS_EX_LABELTIP |        // Show tooltips for truncated items
+                                              LVS_EX_TRACKSELECT);     // CRITICAL: Enables proper selection tracking
+
+            // Set the correct view mode
+            ListView_SetView(self->hListview_, LV_VIEW_DETAILS);
+
             ListView_SetBkColor(self->hListview_, LISTVIEW_BK_COLOR);
             ListView_SetTextBkColor(self->hListview_, LISTVIEW_BK_COLOR);
             LVCOLUMNW col = { 0 };
@@ -1113,9 +1124,16 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             col.pszText = (LPWSTR)L"";
             col.cx = LIST_W;
             ListView_InsertColumn(self->hListview_, 0, &col);
+
             SetWindowSubclass(self->hListview_, &MainWindow::ListviewProc, 0, 0);
 			break;
         }
+          //     case WM_ERASEBKGND: {
+//       if (hwnd == self->hListview_) {
+//         return TRUE; // Let the ListView handle background erasing
+//       }
+//       break;
+// }
     case WM_HOTKEY:
         self->processHotkey(wParam);
         return 0;
@@ -1202,12 +1220,22 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         }
         return 0;
 
-    case WM_NOTIFY:
+    case WM_NOTIFY:{
+      
+      LPNMHDR nmhdr = (LPNMHDR)lParam;
+    if (nmhdr->code == LVN_ITEMCHANGED) {
+        LPNMLISTVIEW pNMLV = (LPNMLISTVIEW)lParam;
+        
+        // Force redraw when selection changes
+        if ((pNMLV->uChanged & LVIF_STATE) && 
+            ((pNMLV->uOldState & LVIS_SELECTED) != (pNMLV->uNewState & LVIS_SELECTED))) {
+            ListView_RedrawItems(self->hListview_, pNMLV->iItem, pNMLV->iItem);
+        }
+    }
         if ((HWND)((LPNMHDR)lParam)->hwndFrom == self->hListview_) {
             if (((NMHDR*)lParam)->code == LVN_GETDISPINFOW) {
                 self->processListViewContent(lParam);
             }else if(self->mode_ == Mode::Clipboard && ((NMHDR*)lParam)->code == NM_CUSTOMDRAW){
-
                 LPNMLVCUSTOMDRAW lvcd = (LPNMLVCUSTOMDRAW)lParam;
                 switch (lvcd->nmcd.dwDrawStage) {
                 case CDDS_PREPAINT:
@@ -1215,48 +1243,183 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 case CDDS_ITEMPREPAINT:
                     return CDRF_NOTIFYSUBITEMDRAW;
                 case CDDS_SUBITEM | CDDS_ITEMPREPAINT: {
-                    int itemIdx = (int)lvcd->nmcd.dwItemSpec;
-                    int subItem = lvcd->iSubItem; // If you use subitems; adjust as needed
-
-                    // Get item:
-                    const auto& item = self->clipboard_.getItems()[itemIdx];
-                    RECT rc;
-                    ListView_GetSubItemRect(lvcd->nmcd.hdr.hwndFrom, itemIdx, subItem, LVIR_LABEL, &rc);
-
-                    int x = rc.left;
-                    int y = rc.top;
-                    HDC hdc = lvcd->nmcd.hdc;
-
-                    // Prepare font and colors:
-                    int oldBkMode = SetBkMode(hdc, TRANSPARENT);
-                    COLORREF defaultColor = GetTextColor(hdc);
-
-                    // Draw text char by char, set color for matches
-                    int line = 1;
-                    for (size_t i = 0; i < item.content.size(); ++i) {
-                        if (line > 2) break;
-                        if (item.content[i] == L'\n') {
-                            ++line;
-						}
-
-                        std::wstring chr(1, item.content[i] == L'\n' ? L'↓' : item.content[i]);//¶
-                        SIZE sz;
-                        GetTextExtentPoint32W(hdc, chr.c_str(), 1, &sz);
-                        if (item.highlight_mask.size() > i && item.highlight_mask[i]) {
-                            SetTextColor(hdc, HEXTOCOLORREF(0x3370FF)); // highlight
-                        } else {
-                            SetTextColor(hdc, defaultColor);
-                        }
-                        TextOutW(hdc, x, y, chr.c_str(), 1);
-                        x += sz.cx;
+                  int itemIdx = (int)lvcd->nmcd.dwItemSpec;
+                  int subItem = lvcd->iSubItem;
+    
+                  const auto& item = self->clipboard_.getItems()[itemIdx];
+                  RECT rc;
+                  HDC hdc = lvcd->nmcd.hdc;
+    
+                  // Get the correct subitem rect
+                  ListView_GetSubItemRect(lvcd->nmcd.hdr.hwndFrom, itemIdx, subItem, LVIR_BOUNDS, &rc);
+    
+                  // Add some padding for better readability
+                  rc.left += 4;
+                  rc.right -= 4;
+                  rc.top += 2;
+    
+                  // CRITICAL FIX: Get the actual selection state from ListView, not just the custom draw state
+                  BOOL selected = ListView_GetItemState(lvcd->nmcd.hdr.hwndFrom, itemIdx, LVIS_SELECTED);
+                  BOOL focused = ListView_GetItemState(lvcd->nmcd.hdr.hwndFrom, itemIdx, LVIS_FOCUSED);
+                  BOOL hot = (lvcd->nmcd.uItemState & CDIS_HOT);
+    
+                  // Improved background color selection
+                  COLORREF bkColor;
+                  if (selected) {
+                    if (GetFocus() == lvcd->nmcd.hdr.hwndFrom) {
+                      bkColor = GetSysColor(COLOR_HIGHLIGHT); // Focused selection
+                    } else {
+                      bkColor = GetSysColor(COLOR_BTNFACE); // Unfocused selection
                     }
-                    SetTextColor(hdc, defaultColor);
-                    SetBkMode(hdc, oldBkMode);
-
-                    return CDRF_SKIPDEFAULT; // tells ListView not to draw text itself
+                  } else if (hot) {
+                    bkColor = GetSysColor(COLOR_BTNFACE); // Hover state
+                  } else {
+                    bkColor = GetSysColor(COLOR_WINDOW); // Normal state
+                  }
+    
+                  // Draw background
+                  HBRUSH hBrush = CreateSolidBrush(bkColor);
+                  FillRect(hdc, &rc, hBrush);
+                  DeleteObject(hBrush);
+    
+                  // Improved text color selection with better contrast
+                  COLORREF textColor;
+                  if (selected && (GetFocus() == lvcd->nmcd.hdr.hwndFrom)) {
+                    textColor = GetSysColor(COLOR_HIGHLIGHTTEXT); // Selected with focus
+                  } else if (selected) {
+                    textColor = GetSysColor(COLOR_WINDOWTEXT); // Selected without focus
+                  } else {
+                    textColor = GetSysColor(COLOR_WINDOWTEXT); // Normal
+                  }
+    
+                  COLORREF highlightColor = selected ? RGB(173, 214, 255) : HEXTOCOLORREF(0x3370FF);
+    
+                  // Set up font
+                  HFONT hFont = (HFONT)SendMessage(lvcd->nmcd.hdr.hwndFrom, WM_GETFONT, 0, 0);
+                  HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+    
+                  int oldBkMode = SetBkMode(hdc, TRANSPARENT);
+                  COLORREF oldTextColor = SetTextColor(hdc, textColor);
+    
+                  // Calculate text position (centered vertically)
+                  TEXTMETRIC tm;
+                  GetTextMetrics(hdc, &tm);
+                  int lineHeight = tm.tmHeight + tm.tmExternalLeading;
+                  int y = rc.top + (rc.bottom - rc.top - lineHeight) / 2;
+                  int x = rc.left;
+    
+                  // Process content with line length restriction
+                  std::wstring displayText;
+                  int lineCount = 0;
+                  bool truncated = false;
+    
+                  for (size_t i = 0; i < item.content.size(); ++i) {
+                    if (lineCount >= 2) {
+                      truncated = true;
+                      break;
+                    }
+        
+                    if (item.content[i] == L'\n') {
+                      displayText += L" ";
+                      lineCount++;
+                    } else {
+                      displayText += item.content[i];
+                    }
+                  }
+    
+                  if (truncated) {
+                    displayText += L"...";
+                  }
+    
+                  // Draw text with highlighting
+                  for (size_t i = 0; i < displayText.length(); ++i) {
+                    // Make sure we don't exceed the original highlight mask size
+                    bool isHighlighted = (i < item.highlight_mask.size() && item.highlight_mask[i]);
+        
+                    if (isHighlighted) {
+                      SetTextColor(hdc, highlightColor);
+                    } else {
+                      SetTextColor(hdc, textColor);
+                    }
+        
+                    std::wstring chr(1, displayText[i]);
+                    TextOutW(hdc, x, y, chr.c_str(), 1);
+        
+                    // Calculate character width
+                    SIZE sz;
+                    GetTextExtentPoint32W(hdc, chr.c_str(), 1, &sz);
+                    x += sz.cx;
+        
+                    // Stop if we're going to exceed the cell width
+                    if (x > rc.right - 8) { // 8px padding
+                      if (i < displayText.length() - 1) {
+                        TextOutW(hdc, x, y, L"...", 3);
+                      }
+                      break;
+                    }
+                  }
+    
+                  // Draw focus rectangle if needed
+                  if (focused && selected && (GetFocus() == lvcd->nmcd.hdr.hwndFrom)) {
+                    RECT focusRc = rc;
+                    focusRc.left -= 2;
+                    focusRc.right += 2;
+                    DrawFocusRect(hdc, &focusRc);
+                  }
+    
+                  // Restore GDI objects
+                  SetTextColor(hdc, oldTextColor);
+                  SetBkMode(hdc, oldBkMode);
+                  SelectObject(hdc, hOldFont);
+    
+                  return CDRF_SKIPDEFAULT;
                 }
+                 
+                // case CDDS_SUBITEM | CDDS_ITEMPREPAINT: {
+                //   // first rough implemention, unselected, no highligh
+                //     int itemIdx = (int)lvcd->nmcd.dwItemSpec;
+                //     int subItem = lvcd->iSubItem; // If you use subitems; adjust as needed
+
+                //     // Get item:
+                //     const auto& item = self->clipboard_.getItems()[itemIdx];
+                //     RECT rc;
+                //     HDC hdc = lvcd->nmcd.hdc;
+                //     ListView_GetSubItemRect(lvcd->nmcd.hdr.hwndFrom, itemIdx, subItem, LVIR_LABEL, &rc);
+
+                //     int x = rc.left;
+                //     int y = rc.top;
+
+                //     // Prepare font and colors:
+                //     int oldBkMode = SetBkMode(hdc, TRANSPARENT);
+
+                //     COLORREF defaultColor = GetTextColor(hdc);
+                //     // Draw text char by char, set color for matches
+                //     int line = 1;
+                //     for (size_t i = 0; i < item.content.size(); ++i) {
+                //         if (line > 2) break;
+                //         if (item.content[i] == L'\n') {
+                //             ++line;
+				// 		}
+
+                //         std::wstring chr(1, item.content[i] == L'\n' ? L'↓' : item.content[i]);//¶
+                //         SIZE sz;
+                //         GetTextExtentPoint32W(hdc, chr.c_str(), 1, &sz);
+                //         if (item.highlight_mask.size() > i && item.highlight_mask[i]) {
+                //             SetTextColor(hdc, HEXTOCOLORREF(0x3370FF)); // highlight
+                //         } else {
+                //             SetTextColor(hdc, defaultColor);
+                //         }
+                //         TextOutW(hdc, x, y, chr.c_str(), 1);
+                //         x += sz.cx;
+                //     }
+                //     SetTextColor(hdc, defaultColor);
+                //     SetBkMode(hdc, oldBkMode);
+
+                //     return CDRF_SKIPDEFAULT; // tells ListView not to draw text itself
+                // }
                 }
             }
+        }
         }
         break;
     case WM_SIZE:{
