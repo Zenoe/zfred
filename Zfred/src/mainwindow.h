@@ -78,7 +78,7 @@ private:
     LRESULT processBackspace();
     LRESULT processAppendHistory();
 
-    LRESULT processContextMenu();
+    LRESULT processCustomContextMenu();
     //bool processListViewContent(LPARAM lParam, const std::vector<std::wstring>& items);
     void processListViewContent(LPARAM lParam);
     void update_spinner();

@@ -1,9 +1,10 @@
 #pragma once
 #include "utils/dbsqlite.h"
 #include "constant.h"
-
+#include "utils/dbsqlite.h"
+#include "db/SqliteDB.h"
 struct ClipItem {
-    int id_;
+    int id_=0;
     std::wstring content;
     std::wstring timestamp;
     ClipItem() = default;
@@ -21,7 +22,7 @@ struct ClipItem {
 
 struct DisplayClipItem : ClipItem {
     std::vector<bool> highlight_mask;
-    DisplayClipItem() = default; // This now works!
+    DisplayClipItem() = default;
 
     DisplayClipItem(const ClipItem& clip, std::vector<bool> mask)
         : ClipItem(clip), highlight_mask(std::move(mask)) {}
@@ -30,16 +31,20 @@ struct DisplayClipItem : ClipItem {
 //     const ClipItem* base;
 //     std::vector<bool> highlight_mask;
 // };
+
 class Clipboard {
 public:
-    Clipboard();
+    Clipboard(const std::string& dbPath="clipboard.db");
     void add(std::wstring item);
+    bool remove(int idx);
     size_t getCount();
     const std::vector<DisplayClipItem>& getItems(int start = 0, int limit = clipItemSize);
     bool write(int idx);
     void filter(const std::wstring&);
 private:
-    std::unique_ptr<Database<ClipItem>> db_;
+    SqliteDB db_;
+    // std::unique_ptr<Database> db_;
     std::deque<ClipItem> allItems;
     std::vector<DisplayClipItem> filteredItems;
+    void initItems(int start = 0, int limit = clipItemSize);
 };

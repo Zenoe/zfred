@@ -61,4 +61,29 @@ namespace sys_util {
         if (bCoInit) CoUninitialize();
         return result;
     }
+
+    bool Write2Clipboard(const std::wstring& text){
+        if(text.empty()) return false;
+        if (!OpenClipboard(nullptr)) return false;
+        EmptyClipboard();
+
+        // 分配全局内存（包含结尾的 L'\0'）
+        size_t data_size = (text.size() + 1) * sizeof(wchar_t);
+        HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, data_size);
+        if (!hMem) {
+            CloseClipboard();
+            return false;
+        }
+
+        // 将内容拷贝到分配的内存
+        void* pMem = GlobalLock(hMem);
+        memcpy(pMem, text.c_str(), data_size);
+        GlobalUnlock(hMem);
+
+        // 设置剪贴板内容为 Unicode 文本
+        SetClipboardData(CF_UNICODETEXT, hMem);
+
+        // 剪贴板现在拥有数据的所有权，不需要手动 GlobalFree(hMem)
+        CloseClipboard();
+    }
 }

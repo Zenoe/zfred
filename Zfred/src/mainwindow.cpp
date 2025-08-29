@@ -12,6 +12,7 @@
 #include <dwmapi.h> // For DwmExtendFrameIntoClientArea (link with dwmapi.lib)
 
 #include "FsUtils.h"
+#include "utils/sysutil.h"
 
 //#ifdef _DEBUG
 #include "debugtool.h"
@@ -475,17 +476,13 @@ void MainWindow:: autofill_input_by_selection() {
         }
     }
 }
-void MainWindow::file_actions_menu(const std::wstring& path) {
+void MainWindow::file_actions_menu(const std::wstring& item) {
     HMENU hMenu = CreatePopupMenu();
-    AppendMenuW(hMenu, MF_STRING, 1, L"Open");
-    AppendMenuW(hMenu, MF_STRING, 2, L"Open folder");
-    AppendMenuW(hMenu, MF_STRING, 3, L"Copy path");
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hMenu, MF_STRING, 4, L"Move to Trash");
-    AppendMenuW(hMenu, MF_STRING, 5, L"Delete (permanent)");
-    AppendMenuW(hMenu, MF_STRING, 6, L"Rename...");
-    bool is_bookmarked = std::find(bookmarks_.all().begin(), bookmarks_.all().end(), path) != bookmarks_.all().end();
-    AppendMenuW(hMenu, MF_STRING, 7, is_bookmarked ? L"Remove Bookmark" : L"Add Bookmark");
+    AppendMenuW(hMenu, MF_STRING, 1, L"Copy");
+    AppendMenuW(hMenu, MF_STRING, 2, L"Delete");
+    // AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+    bool is_bookmarked = std::find(bookmarks_.all().begin(), bookmarks_.all().end(), item) != bookmarks_.all().end();
+    AppendMenuW(hMenu, MF_STRING, 3, is_bookmarked ? L"Remove Bookmark" : L"Add Bookmark");
     //POINT pt; GetCursorPos(&pt);
     RECT rc; // bounding rectangle for the item
     if (!ListView_GetItemRect(hListview_, sel_, &rc, LVIR_BOUNDS)) return;
@@ -494,30 +491,11 @@ void MainWindow::file_actions_menu(const std::wstring& path) {
     ClientToScreen(hListview_, &pt);
     int res = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd_, NULL);
     switch (res) {
-    case 1: fileactions::launch(path); break;
-    case 2: fileactions::open_location(path); break;
-    case 3: fileactions::copy_path_to_clipboard(path); break;
-    case 4: fileactions::move_to_trash(path); break;
-    case 5: fileactions::delete_file(path); break;
-    case 6: {
-        wchar_t newname[MAX_PATH] = { 0 };
-        if (DialogBoxParamW(hInstance_, MAKEINTRESOURCEW(101), hwnd_, [](HWND dlg, UINT msg, WPARAM wp, LPARAM lp) -> INT_PTR {
-            if (msg == WM_COMMAND && LOWORD(wp) == IDOK) {
-                GetDlgItemTextW(dlg, 100, (LPWSTR)GetWindowLongPtrW(dlg, GWLP_USERDATA), MAX_PATH);
-                EndDialog(dlg, IDOK); return TRUE;
-            }
-            if (msg == WM_INITDIALOG) { SetWindowLongPtrW(dlg, GWLP_USERDATA, lp); return TRUE; }
-            if (msg == WM_COMMAND && LOWORD(wp) == IDCANCEL) { EndDialog(dlg, IDCANCEL); return TRUE; }
-            return FALSE;
-            }, (LPARAM)newname) == IDOK && newname[0]) {
-            std::wstring newpath = path.substr(0, path.find_last_of(L"\\/") + 1) + newname;
-            fileactions::rename_file(path, newpath);
-        }
-        break;
-    }
-    case 7: {
-        if (is_bookmarked) bookmarks_.remove(path);
-        else bookmarks_.add(path);
+    case 1: sys_util::Write2Clipboard(item); break;
+    case 2: break;
+    case 3: {
+        if (is_bookmarked) bookmarks_.remove(item);
+        else bookmarks_.add(item);
         bookmarks_.save();
         update_listview();
         break;
@@ -754,20 +732,18 @@ void MainWindow::selectListview(int sel) {
 	// Ensure visible
 	SendMessageW(self->hListview_, LVM_ENSUREVISIBLE, (WPARAM)sel, (LPARAM)FALSE);
 }
-LRESULT MainWindow::processContextMenu() {
+LRESULT MainWindow::processCustomContextMenu() {
     if (sel_ < 0) return 0;
-	std::wstring path;
-	if (mode_ == Mode::FileBrowser) {
-		auto e = self->browser_.selected();
-		if (e) path = e->fullpath;
+	std::wstring selectedItem;
+	if (mode_ == Mode::History && sel_ < (int)history_.size()) {
+		selectedItem = history_.all()[sel_];
 	}
-	else if (self->mode_ == Mode::History && self->sel_ < (int)self->history_.size()) {
-		path = self->history_.all()[self->sel_];
-	}
-	else if (self->mode_ == Mode::Bookmarks && self->sel_ < (int)self->bookmarks_.all().size()) {
-		path = self->bookmarks_.all()[self->sel_];
-	}
-	if (!path.empty()) self->file_actions_menu(path);
+	else if (mode_ == Mode::Bookmarks && sel_ < (int)bookmarks_.all().size()) {
+		selectedItem = bookmarks_.all()[sel_];
+	}else if(mode_ == Mode::Clipboard){
+      selectedItem = clipboard_.getItems()[sel_].content;
+    }
+	if (!selectedItem.empty()) file_actions_menu(selectedItem);
 	return 0;
 }
 void MainWindow::processReturn() {
@@ -892,9 +868,9 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
             }
             return 0;
         }
-        else if (wParam == VK_F2 || wParam == VK_APPS) {
-            return self->processContextMenu();
-        }
+        //else if (wParam == VK_F2 || wParam == VK_APPS) {
+        //    return self->processCustomContextMenu();
+        //}
         else if (wParam == VK_ESCAPE ) {
             self->show(false);
             SetWindowTextW(hEdit, L"");
@@ -954,6 +930,9 @@ LRESULT MainWindow::processContextMenu(WPARAM wParam, LPARAM lParam) {
             }
             else if (mode_ == Mode::History) {
                 hittedItem = history_.all()[iItem];
+            }else if(mode_ == Mode::Clipboard){
+              processCustomContextMenu(); 
+              return 0;
             }
 			GuiHelper::ShowShellContextMenu(hwnd_, hListview_, hittedItem, x, y);
         }
@@ -1245,136 +1224,102 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 case CDDS_SUBITEM | CDDS_ITEMPREPAINT: {
                   int itemIdx = (int)lvcd->nmcd.dwItemSpec;
                   int subItem = lvcd->iSubItem;
-    
+
                   const auto& item = self->clipboard_.getItems()[itemIdx];
                   RECT rc;
                   HDC hdc = lvcd->nmcd.hdc;
-    
+
                   // Get the correct subitem rect
                   ListView_GetSubItemRect(lvcd->nmcd.hdr.hwndFrom, itemIdx, subItem, LVIR_BOUNDS, &rc);
-    
+
                   // Add some padding for better readability
                   rc.left += 4;
                   rc.right -= 4;
                   rc.top += 2;
-    
-                  // CRITICAL FIX: Get the actual selection state from ListView, not just the custom draw state
+
+                  // Get state
                   BOOL selected = ListView_GetItemState(lvcd->nmcd.hdr.hwndFrom, itemIdx, LVIS_SELECTED);
                   BOOL focused = ListView_GetItemState(lvcd->nmcd.hdr.hwndFrom, itemIdx, LVIS_FOCUSED);
                   BOOL hot = (lvcd->nmcd.uItemState & CDIS_HOT);
-    
-                  // Improved background color selection
-                  COLORREF bkColor;
-                  if (selected) {
-                    if (GetFocus() == lvcd->nmcd.hdr.hwndFrom) {
-                      bkColor = GetSysColor(COLOR_HIGHLIGHT); // Focused selection
-                    } else {
-                      bkColor = GetSysColor(COLOR_BTNFACE); // Unfocused selection
-                    }
-                  } else if (hot) {
-                    bkColor = GetSysColor(COLOR_BTNFACE); // Hover state
-                  } else {
-                    bkColor = GetSysColor(COLOR_WINDOW); // Normal state
-                  }
-    
-                  // Draw background
-                  HBRUSH hBrush = CreateSolidBrush(bkColor);
-                  FillRect(hdc, &rc, hBrush);
-                  DeleteObject(hBrush);
-    
-                  // Improved text color selection with better contrast
-                  COLORREF textColor;
-                  if (selected && (GetFocus() == lvcd->nmcd.hdr.hwndFrom)) {
-                    textColor = GetSysColor(COLOR_HIGHLIGHTTEXT); // Selected with focus
-                  } else if (selected) {
-                    textColor = GetSysColor(COLOR_WINDOWTEXT); // Selected without focus
-                  } else {
-                    textColor = GetSysColor(COLOR_WINDOWTEXT); // Normal
-                  }
-    
+
+                  // Colors
+                  COLORREF bkColor = GetSysColor(COLOR_WINDOW);
+                  if (selected)
+                    bkColor = (GetFocus() == lvcd->nmcd.hdr.hwndFrom) ? GetSysColor(COLOR_HIGHLIGHT) : GetSysColor(COLOR_BTNFACE);
+                  else if (hot)
+                    bkColor = GetSysColor(COLOR_BTNFACE);
+
+                  COLORREF textColor = GetSysColor(COLOR_WINDOWTEXT);
+                  if (selected && (GetFocus() == lvcd->nmcd.hdr.hwndFrom))
+                    textColor = GetSysColor(COLOR_HIGHLIGHTTEXT);
+
                   COLORREF highlightColor = selected ? RGB(173, 214, 255) : HEXTOCOLORREF(0x3370FF);
-    
-                  // Set up font
+
+                  // Double buffering
+                  HDC hdcMem = CreateCompatibleDC(hdc);
+                  int width = rc.right - rc.left;
+                  int height = rc.bottom - rc.top;
+                  HBITMAP hbmMem = CreateCompatibleBitmap(hdc, width, height);
+                  HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, hbmMem);
+
+                  // Background
+                  HBRUSH hBrush = CreateSolidBrush(bkColor);
+                  RECT memRc = {0, 0, width, height};
+                  FillRect(hdcMem, &memRc, hBrush);
+                  DeleteObject(hBrush);
+
+                  // Font
                   HFONT hFont = (HFONT)SendMessage(lvcd->nmcd.hdr.hwndFrom, WM_GETFONT, 0, 0);
-                  HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
-    
-                  int oldBkMode = SetBkMode(hdc, TRANSPARENT);
-                  COLORREF oldTextColor = SetTextColor(hdc, textColor);
-    
-                  // Calculate text position (centered vertically)
+                  HFONT hOldFont = (HFONT)SelectObject(hdcMem, hFont);
+
+                  int oldBkMode = SetBkMode(hdcMem, TRANSPARENT);
+                  COLORREF oldTextColor = SetTextColor(hdcMem, textColor);
+
                   TEXTMETRIC tm;
-                  GetTextMetrics(hdc, &tm);
+                  GetTextMetrics(hdcMem, &tm);
                   int lineHeight = tm.tmHeight + tm.tmExternalLeading;
-                  int y = rc.top + (rc.bottom - rc.top - lineHeight) / 2;
-                  int x = rc.left;
-    
-                  // Process content with line length restriction
-                  std::wstring displayText;
-                  int lineCount = 0;
-                  bool truncated = false;
-    
-                  for (size_t i = 0; i < item.content.size(); ++i) {
-                    if (lineCount >= 2) {
-                      truncated = true;
-                      break;
-                    }
-        
-                    if (item.content[i] == L'\n') {
-                      displayText += L" ";
-                      lineCount++;
-                    } else {
-                      displayText += item.content[i];
-                    }
-                  }
-    
-                  if (truncated) {
-                    displayText += L"...";
-                  }
-    
-                  // Draw text with highlighting
-                  for (size_t i = 0; i < displayText.length(); ++i) {
-                    // Make sure we don't exceed the original highlight mask size
-                    bool isHighlighted = (i < item.highlight_mask.size() && item.highlight_mask[i]);
-        
-                    if (isHighlighted) {
-                      SetTextColor(hdc, highlightColor);
-                    } else {
-                      SetTextColor(hdc, textColor);
-                    }
-        
-                    std::wstring chr(1, displayText[i]);
-                    TextOutW(hdc, x, y, chr.c_str(), 1);
-        
-                    // Calculate character width
-                    SIZE sz;
-                    GetTextExtentPoint32W(hdc, chr.c_str(), 1, &sz);
-                    x += sz.cx;
-        
-                    // Stop if we're going to exceed the cell width
-                    if (x > rc.right - 8) { // 8px padding
-                      if (i < displayText.length() - 1) {
-                        TextOutW(hdc, x, y, L"...", 3);
-                      }
-                      break;
-                    }
-                  }
-    
-                  // Draw focus rectangle if needed
+                  int maxWidth = width - 8;
+
+                  // -- Process text with helpers! --
+                  // At most 2 lines, combine with ↓, truncate with ellipsis if needed
+                  std::vector<std::wstring> lines = GuiHelper::ExtractTwoLines(item.content);
+                  std::wstring combinedLine = GuiHelper::CombineLinesWithArrow(lines);
+                  std::wstring displayText = GuiHelper::TruncateWithEllipsis(hdcMem, combinedLine, maxWidth);
+
+                  // Draw text centered vertically
+                  int y = (height - lineHeight) / 2;
+                  int x = 4;
+
+                  GuiHelper::DrawHighlightedText(hdcMem, x, y, displayText, item.highlight_mask, textColor, highlightColor);
+
+                  // Focus rectangle
                   if (focused && selected && (GetFocus() == lvcd->nmcd.hdr.hwndFrom)) {
-                    RECT focusRc = rc;
-                    focusRc.left -= 2;
-                    focusRc.right += 2;
-                    DrawFocusRect(hdc, &focusRc);
+                    RECT focusRc = {0, 0, width, height};
+                    HBRUSH hOldBrush = (HBRUSH)SelectObject(hdcMem, GetStockObject(NULL_BRUSH));
+                    HPEN hFocusPen = CreatePen(PS_DOT, 1, GetSysColor(COLOR_WINDOWTEXT));
+                    HPEN hOldPen = (HPEN)SelectObject(hdcMem, hFocusPen);
+
+                    Rectangle(hdcMem, focusRc.left, focusRc.top, focusRc.right, focusRc.bottom);
+
+                    SelectObject(hdcMem, hOldBrush);
+                    SelectObject(hdcMem, hOldPen);
+                    DeleteObject(hFocusPen);
                   }
-    
-                  // Restore GDI objects
-                  SetTextColor(hdc, oldTextColor);
-                  SetBkMode(hdc, oldBkMode);
-                  SelectObject(hdc, hOldFont);
-    
+
+                  // Restore and copy
+                  SetTextColor(hdcMem, oldTextColor);
+                  SetBkMode(hdcMem, oldBkMode);
+                  SelectObject(hdcMem, hOldFont);
+                  BitBlt(hdc, rc.left, rc.top, width, height, hdcMem, 0, 0, SRCCOPY);
+
+                  // Clean up
+                  SelectObject(hdcMem, hbmOld);
+                  DeleteObject(hbmMem);
+                  DeleteDC(hdcMem);
+
                   return CDRF_SKIPDEFAULT;
                 }
-                 
+
                 // case CDDS_SUBITEM | CDDS_ITEMPREPAINT: {
                 //   // first rough implemention, unselected, no highligh
                 //     int itemIdx = (int)lvcd->nmcd.dwItemSpec;

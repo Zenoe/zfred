@@ -252,3 +252,64 @@ void GuiHelper::DrawPartialRoundRect(HDC hdc, int x, int y, int w, int h, int ra
     g.FillPath(&fill, &path);
 }
 */
+
+// Split into at most two lines by '\n'
+std::vector<std::wstring> GuiHelper::ExtractTwoLines(const std::wstring& input) {
+    std::vector<std::wstring> lines;
+    std::wstring currentLine;
+    for (size_t i = 0; i < input.size(); ++i) {
+        if (input[i] == L'\n') {
+            lines.push_back(currentLine);
+            currentLine.clear();
+            if (lines.size() == 2) break; // Maximum two lines
+        } else {
+            currentLine += input[i];
+        }
+    }
+    if (!currentLine.empty() && lines.size() < 2)
+        lines.push_back(currentLine);
+    return lines;
+}
+
+// Combine two lines with the '↓' character
+std::wstring GuiHelper::CombineLinesWithArrow(const std::vector<std::wstring>& lines) {
+    if (lines.empty()) return L"";
+    if (lines.size() == 1) return lines[0];
+    return lines[0] + L'↓' + lines[1];
+}
+
+// Truncate string to fit pixel width, add ellipsis '...'
+std::wstring GuiHelper::TruncateWithEllipsis(HDC hdc, const std::wstring& text, int maxWidth) {
+    SIZE textSize;
+    GetTextExtentPoint32W(hdc, text.c_str(), text.length(), &textSize);
+    if (textSize.cx <= maxWidth)
+        return text;
+
+    std::wstring temp;
+    for (size_t i = 0; i < text.length(); ++i) {
+        std::wstring test = temp + text[i] + L"...";
+        GetTextExtentPoint32W(hdc, test.c_str(), test.length(), &textSize);
+        if (textSize.cx > maxWidth) {
+            break;
+        }
+        temp += text[i];
+    }
+    return temp + L"...";
+}
+
+// Draw text with highlight mask
+void GuiHelper::DrawHighlightedText(HDC hdc, int x, int y, const std::wstring& text,
+                         const std::vector<bool>& highlight_mask,
+                         COLORREF textColor, COLORREF highlightColor)
+{
+    for (size_t charIdx = 0; charIdx < text.length(); ++charIdx) {
+        size_t originalPos = charIdx; // Simple mapping (see note in your logic)
+        bool isHighlighted = (originalPos < highlight_mask.size() && highlight_mask[originalPos]);
+        SetTextColor(hdc, isHighlighted ? highlightColor : textColor);
+        wchar_t chr = text[charIdx];
+        TextOutW(hdc, x, y, &chr, 1);
+        SIZE charSize;
+        GetTextExtentPoint32W(hdc, &chr, 1, &charSize);
+        x += charSize.cx;
+    }
+}

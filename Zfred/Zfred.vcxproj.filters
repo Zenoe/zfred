@@ -14,6 +14,9 @@
     <Filter Include="src\utils">
       <UniqueIdentifier>{31bda6d6-4e37-4023-8f62-018686bf9b9c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="src\db">
+      <UniqueIdentifier>{38d5184a-7621-4a1d-b3a7-0f4fe4c48eae}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\bookmarks.h">
@@ -61,9 +64,6 @@
     <ClInclude Include="src\utils\ahocorasick.h">
       <Filter>src\utils</Filter>
     </ClInclude>
-    <ClInclude Include="src\utils\dbsqlite.h">
-      <Filter>src\utils</Filter>
-    </ClInclude>
     <ClInclude Include="src\clipboard.h">
       <Filter>src</Filter>
     </ClInclude>
@@ -75,6 +75,15 @@
     </ClInclude>
     <ClInclude Include="src\utils\log.h">
       <Filter>src\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="src\db\SqliteDB.h">
+      <Filter>src\db</Filter>
+    </ClInclude>
+    <ClInclude Include="src\db\SqliteException.h">
+      <Filter>src\db</Filter>
+    </ClInclude>
+    <ClInclude Include="src\db\ResultSet.h">
+      <Filter>src\db</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -114,14 +123,17 @@
     <ClCompile Include="src\utils\simpleundo.cpp">
       <Filter>src\utils</Filter>
     </ClCompile>
-    <ClCompile Include="src\utils\dbsqlite.cpp">
-      <Filter>src\utils</Filter>
-    </ClCompile>
     <ClCompile Include="src\clipboard.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="src\settingdlg.cpp">
       <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\db\SqliteDB.cpp">
+      <Filter>src\db</Filter>
+    </ClCompile>
+    <ClCompile Include="src\db\ResultSet.cpp">
+      <Filter>src\db</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

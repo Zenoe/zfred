@@ -139,6 +139,9 @@
     <ClInclude Include="src\clipboard.h" />
     <ClInclude Include="src\commandlibrary.h" />
     <ClInclude Include="src\constant.h" />
+    <ClInclude Include="src\db\ResultSet.h" />
+    <ClInclude Include="src\db\SqliteDB.h" />
+    <ClInclude Include="src\db\SqliteException.h" />
     <ClInclude Include="src\debugtool.h" />
     <ClInclude Include="src\fileactions.h" />
     <ClInclude Include="src\filebrowser.h" />
@@ -150,7 +153,6 @@
     <ClInclude Include="src\resource.h" />
     <ClInclude Include="src\settingdlg.h" />
     <ClInclude Include="src\utils\ahocorasick.h" />
-    <ClInclude Include="src\utils\dbsqlite.h" />
     <ClInclude Include="src\utils\log.h" />
     <ClInclude Include="src\utils\simpleundo.h" />
     <ClInclude Include="src\utils\stringutil.h" />
@@ -160,6 +162,8 @@
     <ClCompile Include="src\bookmarks.cpp" />
     <ClCompile Include="src\clipboard.cpp" />
     <ClCompile Include="src\commandlibrary.cpp" />
+    <ClCompile Include="src\db\ResultSet.cpp" />
+    <ClCompile Include="src\db\SqliteDB.cpp" />
     <ClCompile Include="src\fileactions.cpp" />
     <ClCompile Include="src\filebrowser.cpp" />
     <ClCompile Include="src\FsUtils.cpp" />
@@ -168,7 +172,6 @@
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\mainwindow.cpp" />
     <ClCompile Include="src\settingdlg.cpp" />
-    <ClCompile Include="src\utils\dbsqlite.cpp" />
     <ClCompile Include="src\utils\simpleundo.cpp" />
     <ClCompile Include="src\utils\stringutil.cpp" />
     <ClCompile Include="src\utils\sysutil.cpp" />
