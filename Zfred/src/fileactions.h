@@ -2,6 +2,7 @@
 #pragma once
 #include <string>
 
+// todo remove
 namespace fileactions {
     void launch(const std::wstring& filepath);
     void open_location(const std::wstring& filepath);

@@ -6,6 +6,7 @@
 #include <functional>
 #include <atomic>
 #include <condition_variable>
+#include <future>
 
 #include "debugtool.h"
 class HistoryManager {
@@ -14,6 +15,7 @@ public:
     HistoryManager();
     void request_filter(const std::wstring& pat, FilterCallback filterDone);
     void add(const std::wstring& path);
+    void remove(int idx);
     const std::deque<std::wstring>& all() const;
     //std::shared_ptr<const std::deque<std::wstring>> all() const;
     void allWith(std::function<void(const std::deque<std::wstring> &)>) const;
@@ -65,6 +67,8 @@ private:
     std::mutex filter_mutex_;
 	mutable std::mutex items_mtx;
 	mutable std::mutex filtered_items_mtx;
+    std::future<void> item_erase_task_;
+
 	std::mutex loaded_mtx;
 	std::atomic<bool> loaded_{ false };
 

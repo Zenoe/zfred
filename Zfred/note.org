@@ -2,9 +2,11 @@
 * TODO default select first one. if no one is mathed, call shellexecute (the case when sel_ == -1)
 * TODO highlight chars matched to searching text
 * TODO clipboard
-** TODO activate
-** TODO test largetext
-**
+** DONE activate
+** DONE largetext
+** TODO edit
+** TODO group
+** TODO remove
 * DONE 回车应该是打开，而不是autofill
 * TODO setting:
 exclude list
@@ -29,6 +31,7 @@ exclude list
 * DONE open file path in history/bookmark mode
 
 * TODO filebrowser support %appdata%, ~ etc
+* TODO search in folder
 
 
 

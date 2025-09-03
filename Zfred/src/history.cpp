@@ -112,6 +112,26 @@ void HistoryManager::add(const std::wstring& path) {
 	items_->push_front(path);
 	if (items_->size() > max_items_) items_->pop_back();
 }
+
+void HistoryManager::remove(int idx){
+	if(idx <0 || idx >= filtered_items_->size()) return;
+	std::wstring text = ( * filtered_items_)[idx];
+	{
+		std::lock_guard<std::mutex> lock(filter_mutex_);
+		filtered_items_->erase(filtered_items_->begin() + idx);
+	}
+
+	{
+		// std::lock_guard<std::mutex> lock2(items_mtx);
+		// items_->erase(std::remove(items_->begin(), items_->end(), text), items_->end());
+
+	}
+	item_erase_task_ = std::async(std::launch::async, [this, text] {
+		std::lock_guard<std::mutex> lock2(items_mtx);
+		items_->erase(std::remove(items_->begin(), items_->end(), text), items_->end());
+		});
+}
+
 const std::deque<std::wstring>& HistoryManager::all() const {
 
 	std::lock_guard<std::mutex> lock(filtered_items_mtx);
@@ -129,25 +149,27 @@ void HistoryManager::allWith(std::function<void(const std::deque<std::wstring>&)
 	//cb(filtered_items_);
 	std::shared_ptr<const std::deque<std::wstring>> snapshot;
 	{
-		OutputDebugPrint("lockfiltered_items_mtx");
 		std::lock_guard<std::mutex> lock(filtered_items_mtx);
 		//if(!filtered_items_)
 		//	MessageBox(nullptr, L"filter items_ is null", L"caption", 0);
 
 		snapshot = filtered_items_; // Refcount increment
 	}
-	OutputDebugPrint("lockfiltered_items_mtx endddddddd");
 	cb(*snapshot);
 	//return filtered_items_;
 }
 
 void HistoryManager::save() {
+	if(item_erase_task_.valid()){
+		item_erase_task_.wait();
+	}
 	std::wofstream out(L"alfred_history.txt");
+	std::lock_guard<std::mutex> lock2(items_mtx);
 	for (const auto& s : *items_) out << s << L"\n";
 }
 void HistoryManager::loadSync() {
 	items_->clear();
-	std::wifstream in(L"alfred_history->txt");
+	std::wifstream in(L"alfred_history.txt");
 	std::wstring s;
 	while (std::getline(in, s)) if (!s.empty()) items_->push_back(s);
 

@@ -67,7 +67,7 @@ private:
     void activate_bookmarks(int idx);
     void activate_clipboard(int idx);
 
-    void file_actions_menu(const std::wstring& path);
+    void deleteItem();
     void autofill_input_by_selection();
 
     void save_all();

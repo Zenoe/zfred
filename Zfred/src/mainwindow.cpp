@@ -476,32 +476,18 @@ void MainWindow:: autofill_input_by_selection() {
         }
     }
 }
-void MainWindow::file_actions_menu(const std::wstring& item) {
-    HMENU hMenu = CreatePopupMenu();
-    AppendMenuW(hMenu, MF_STRING, 1, L"Copy");
-    AppendMenuW(hMenu, MF_STRING, 2, L"Delete");
-    // AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    bool is_bookmarked = std::find(bookmarks_.all().begin(), bookmarks_.all().end(), item) != bookmarks_.all().end();
-    AppendMenuW(hMenu, MF_STRING, 3, is_bookmarked ? L"Remove Bookmark" : L"Add Bookmark");
-    //POINT pt; GetCursorPos(&pt);
-    RECT rc; // bounding rectangle for the item
-    if (!ListView_GetItemRect(hListview_, sel_, &rc, LVIR_BOUNDS)) return;
 
-    POINT pt = { rc.left + 4, rc.bottom - 4 }; 
-    ClientToScreen(hListview_, &pt);
-    int res = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd_, NULL);
-    switch (res) {
-    case 1: sys_util::Write2Clipboard(item); break;
-    case 2: break;
-    case 3: {
-        if (is_bookmarked) bookmarks_.remove(item);
-        else bookmarks_.add(item);
-        bookmarks_.save();
-        update_listview();
-        break;
+void MainWindow::deleteItem() {
+	if (mode_ == Mode::History && sel_ < (int)history_.size()) {
+      history_.remove(sel_);
+      update_listview();
+		// selectedItem = history_.all()[sel_];
+	}
+	else if (mode_ == Mode::Bookmarks && sel_ < (int)bookmarks_.all().size()) {
+		//selectedItem = bookmarks_.all()[sel_];
+	}else if(mode_ == Mode::Clipboard){
+       //selectedItem = clipboard_.getItems()[sel_].content;
     }
-    }
-    DestroyMenu(hMenu);
 }
 
 LRESULT MainWindow::processAltBackspace() {
@@ -741,9 +727,34 @@ LRESULT MainWindow::processCustomContextMenu() {
 	else if (mode_ == Mode::Bookmarks && sel_ < (int)bookmarks_.all().size()) {
 		selectedItem = bookmarks_.all()[sel_];
 	}else if(mode_ == Mode::Clipboard){
-      selectedItem = clipboard_.getItems()[sel_].content;
+       selectedItem = clipboard_.getItems()[sel_].content;
     }
-	if (!selectedItem.empty()) file_actions_menu(selectedItem);
+	if (selectedItem.empty()) return 0;
+    HMENU hMenu = CreatePopupMenu();
+    AppendMenuW(hMenu, MF_STRING, 1, L"Copy");
+    AppendMenuW(hMenu, MF_STRING, 2, L"Delete");
+    // AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+
+    bool is_bookmarked = std::find(bookmarks_.all().begin(), bookmarks_.all().end(), selectedItem) != bookmarks_.all().end();
+    //POINT pt; GetCursorPos(&pt);
+    RECT rc; // bounding rectangle for the item
+    if (!ListView_GetItemRect(hListview_, sel_, &rc, LVIR_BOUNDS)) return 0;
+
+    POINT pt = { rc.left + 4, rc.bottom - 4 }; 
+    ClientToScreen(hListview_, &pt);
+    int res = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd_, NULL);
+    switch (res) {
+    case 1: sys_util::Write2Clipboard(selectedItem); break;
+    case 2: deleteItem(); break;
+    //case 3: {
+    //    if (is_bookmarked) bookmarks_.remove(item);
+    //    else bookmarks_.add(item);
+    //    bookmarks_.save();
+    //    update_listview();
+    //    break;
+    //}
+    }
+    DestroyMenu(hMenu);
 	return 0;
 }
 void MainWindow::processReturn() {
@@ -868,9 +879,9 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARA
             }
             return 0;
         }
-        //else if (wParam == VK_F2 || wParam == VK_APPS) {
-        //    return self->processCustomContextMenu();
-        //}
+        else if (wParam == VK_F2 || wParam == VK_APPS) {
+           return self->processCustomContextMenu();
+        }
         else if (wParam == VK_ESCAPE ) {
             self->show(false);
             SetWindowTextW(hEdit, L"");
